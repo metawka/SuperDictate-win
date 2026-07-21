@@ -47,6 +47,8 @@ WIDTH = 360
 PADDING = 14
 ICON_SIZE = 18
 GAP = 10
+RADIUS = 12
+STRIPE = 4
 # Clear of the recording capsule, which owns the bottom centre.
 BOTTOM_RESERVE = 96
 FADE_MS = 180
@@ -161,15 +163,22 @@ class Toast(QWidget):
 
         rect = QRectF(0.5, 0.5, self.width() - 1.0, self.height() - 1.0)
         path = QPainterPath()
-        path.addRoundedRect(rect, 12, 12)
+        path.addRoundedRect(rect, RADIUS, RADIUS)
         painter.fillPath(path, QColor(p.card))
-        painter.setPen(QColor(self._accent()))
-        painter.drawPath(path)
 
         # A stripe on the leading edge, so severity reads before the text.
-        stripe = QPainterPath()
-        stripe.addRoundedRect(QRectF(1.0, 1.0, 4.0, self.height() - 2.0), 2, 2)
-        painter.fillPath(stripe, QColor(self._accent()))
+        # Clipped to the card: a square-cornered bar drawn over a rounded
+        # corner pokes out past the edge and onto the bare background.
+        painter.save()
+        painter.setClipPath(path)
+        painter.fillRect(QRectF(rect.left(), rect.top(), STRIPE, rect.height()),
+                         QColor(self._accent()))
+        painter.restore()
+
+        # A neutral outline. The stripe and the icon already carry the
+        # severity; an accent-coloured border made every toast shout.
+        painter.setPen(QColor(p.card_border))
+        painter.drawPath(path)
 
         painter.drawPixmap(
             PADDING, PADDING,
