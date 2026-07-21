@@ -25,15 +25,24 @@ from typing import Optional
 
 from PySide6.QtCore import (
     Property,
+    QEasingCurve,
     QPoint,
     QPointF,
     QPropertyAnimation,
+    QRect,
     QRectF,
     Qt,
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+)
 from PySide6.QtWidgets import QApplication, QWidget
 
 from ..settings import AccentColor, ColorSpec, HUDBackground, HUDSize
@@ -169,6 +178,19 @@ class RecordingHUD(QWidget):
         self._mode = "transcribing"
         self.update()
 
+    def show_settled(self) -> None:
+        """Stay up, done, while the finished sentence is still on screen.
+
+        The capsule used to vanish the instant the text was pasted, and
+        the bubble above it kept the sentence for another two seconds,
+        so the words hung over an empty screen with nothing under them.
+        Both now leave together; until then the bars just stop dancing.
+        """
+        if self._mode in ("hidden", "hiding", "result"):
+            return
+        self._mode = "settled"
+        self.update()
+
     def show_result(self, icon_name: str, color: str) -> None:
         """Report the outcome in place of the waveform.
 
@@ -288,6 +310,12 @@ class RecordingHUD(QWidget):
             for index in range(BAR_COUNT):
                 wave = 0.5 + 0.5 * math.sin(self._phase * 2.0 - index * 0.9)
                 self._bar_levels[index] += (0.2 + wave * 0.55 - self._bar_levels[index]) * 0.3
+        elif self._mode == "settled":
+            # Come to rest rather than freeze mid-bounce: the capsule is
+            # finished, and five bars stopped at random heights read as a
+            # hang rather than as an ending.
+            for index in range(BAR_COUNT):
+                self._bar_levels[index] += (0.14 - self._bar_levels[index]) * 0.2
         self.update()
 
     # -- painting -----------------------------------------------------
@@ -368,11 +396,15 @@ class TranscriptBubble(QWidget):
     is the behaviour the capsule itself was moved away from.
     """
 
-    HEIGHT = 30
-    PADDING = 14
-    GAP = 8
-    MIN_WIDTH = 90
+    HEIGHT = 32
+    PADDING = 17
+    GAP = 9
+    MIN_WIDTH = 96
     MAX_SCREEN_FRACTION = 0.5
+    # Appearing is a small overshooting pop; growing with the sentence is
+    # a plain ease, because an overshoot on every new word would wobble.
+    GROW_MS = 260
+    RESIZE_MS = 190
 
     def __init__(self, anchor: Optional[QWidget] = None) -> None:
         super().__init__(None)
@@ -392,8 +424,20 @@ class TranscriptBubble(QWidget):
         self._opacity = 0.0
         self.background_style = HUDBackground.SYSTEM
 
+        # Segoe UI Variable Display is the Windows 11 face cut for short
+        # runs of large-ish text; it is noticeably cleaner here than the
+        # body face at the same size, and falls back on Windows 10.
+        font = QFont()
+        font.setFamilies(["Segoe UI Variable Display", "Segoe UI Semibold",
+                          "Segoe UI", "sans-serif"])
+        font.setPointSizeF(10.5)
+        font.setWeight(QFont.Weight.Medium)
+        font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 100.5)
+        self.setFont(font)
+
         self._fade = QPropertyAnimation(self, b"fadeOpacity", self)
         self._fade.finished.connect(self._fade_finished)
+        self._shape = QPropertyAnimation(self, b"geometry", self)
         self.resize(self.MIN_WIDTH, self.HEIGHT)
 
     def configure(self, *, background: HUDBackground) -> None:
@@ -424,11 +468,20 @@ class TranscriptBubble(QWidget):
         if not text:
             self.hide_bubble()
             return
-        self._resize_to_text()
-        self._reposition()
-        if not self.isVisible():
+
+        target = self._target_rect()
+        if self.isVisible():
+            # Already up: widen or narrow into the new sentence instead of
+            # snapping, so the bubble reads as one object growing with the
+            # speech rather than a series of differently-sized bubbles.
+            self._animate_shape(target, self.RESIZE_MS,
+                                QEasingCurve.Type.OutCubic)
+        else:
+            self.setGeometry(_seeded(target))
             self._make_click_through()
             self.show()
+            self._animate_shape(target, self.GROW_MS,
+                                QEasingCurve.Type.OutBack)
             self._animate_to(1.0, ANIMATE_IN_SECONDS)
         self.update()
 
@@ -436,7 +489,20 @@ class TranscriptBubble(QWidget):
         self._text = ""
         if not self.isVisible():
             return
+        # Shrink back into itself on the way out, the reverse of the pop.
+        self._animate_shape(_seeded(self.geometry(), 0.94),
+                            int(ANIMATE_OUT_SECONDS * 1000),
+                            QEasingCurve.Type.InCubic)
         self._animate_to(0.0, ANIMATE_OUT_SECONDS)
+
+    def _animate_shape(self, target: QRect, milliseconds: int,
+                       curve: QEasingCurve.Type) -> None:
+        self._shape.stop()
+        self._shape.setDuration(milliseconds)
+        self._shape.setEasingCurve(curve)
+        self._shape.setStartValue(self.geometry())
+        self._shape.setEndValue(target)
+        self._shape.start()
 
     def _animate_to(self, target: float, seconds: float) -> None:
         self._fade.stop()
@@ -458,17 +524,16 @@ class TranscriptBubble(QWidget):
         return (QApplication.screenAt(_cursor_position())
                 or QApplication.primaryScreen())
 
-    def _resize_to_text(self) -> None:
+    def _target_rect(self) -> QRect:
+        """Where and how wide the bubble wants to be for its current text."""
         area = self._screen().availableGeometry()
         limit = int(area.width() * self.MAX_SCREEN_FRACTION)
         # A couple of pixels of slack: sized to exactly the text advance,
         # rounding leaves the last glyph a hair short and the whole line
         # gets elided when it would have fitted.
         wanted = self.fontMetrics().horizontalAdvance(self._text) + self.PADDING * 2 + 4
-        self.resize(max(self.MIN_WIDTH, min(limit, wanted)), self.HEIGHT)
+        width = max(self.MIN_WIDTH, min(limit, wanted))
 
-    def _reposition(self) -> None:
-        area = self._screen().availableGeometry()
         if self._anchor is not None and self._anchor.isVisible():
             capsule = self._anchor.geometry()
             bottom = capsule.top() - self.GAP
@@ -476,10 +541,10 @@ class TranscriptBubble(QWidget):
         else:
             bottom = area.bottom() - BOTTOM_MARGIN
             centre_x = area.center().x()
-        target = QPoint(centre_x - self.width() // 2, bottom - self.height())
-        target = _clamped_to_screen(target, self.width(), self.height())
-        if target != self.pos():
-            self.move(target)
+        corner = _clamped_to_screen(
+            QPoint(centre_x - width // 2, bottom - self.HEIGHT),
+            width, self.HEIGHT)
+        return QRect(corner.x(), corner.y(), width, self.HEIGHT)
 
     def _make_click_through(self) -> None:
         try:
@@ -517,6 +582,19 @@ class TranscriptBubble(QWidget):
                          Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                          elided)
         painter.end()
+
+
+def _seeded(target: QRect, scale: float = 0.86) -> QRect:
+    """A smaller rectangle sharing ``target``'s centre.
+
+    The bubble grows out of this on the way in and falls back into it on
+    the way out, so it expands from the middle instead of unrolling from
+    a corner.
+    """
+    width = max(1, int(target.width() * scale))
+    height = max(1, int(target.height() * (scale - 0.16)))
+    return QRect(target.center().x() - width // 2,
+                 target.center().y() - height // 2, width, height)
 
 
 def _bubble_colors(style: HUDBackground) -> tuple[QColor, QColor, QColor]:

@@ -199,7 +199,12 @@ class Sounds:
 # -- autostart -----------------------------------------------------------
 
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_RUN_VALUE = "D1CT"
+_RUN_VALUE = "Dictation"
+# The app was called D1CT before 1.8.0 (and SuperDictate before 1.5.0).
+# Its autostart entry names an executable that is no longer installed, so
+# it is cleared whenever this one is written or removed; left alone it
+# would fail silently at every login.
+_LEGACY_RUN_VALUES = ("D1CT", "SuperDictate")
 
 
 def _launch_command() -> str:
@@ -227,6 +232,11 @@ def set_autostart(enabled: bool) -> bool:
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0,
                             winreg.KEY_SET_VALUE) as key:
+            for legacy in _LEGACY_RUN_VALUES:
+                try:
+                    winreg.DeleteValue(key, legacy)
+                except FileNotFoundError:
+                    pass
             if enabled:
                 winreg.SetValueEx(key, _RUN_VALUE, 0, winreg.REG_SZ, _launch_command())
             else:

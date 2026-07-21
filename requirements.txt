@@ -1,4 +1,4 @@
-# D1CT for Windows, runtime dependencies.
+# Dictation for Windows, runtime dependencies.
 #
 # Pinned to the versions the port was built and tested against
 # (Python 3.11, Windows 11 24H2, x64).

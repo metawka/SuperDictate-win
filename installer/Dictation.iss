@@ -1,17 +1,17 @@
-; Inno Setup script for D1CT (Windows).
+; Inno Setup script for Dictation (Windows).
 ;
 ; Builds a per-user installer: the app writes only to %LOCALAPPDATA% and
 ; needs no driver or service, so requiring an admin prompt would buy
 ; nothing and would break installing on a locked-down work machine.
 ;
-; Compile after `build.ps1` has produced dist\D1CT\:
-;   & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\D1CT.iss
+; Compile after `build.ps1` has produced dist\Dictation\:
+;   & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\Dictation.iss
 
-#define AppName        "D1CT"
-#define AppVersion     "1.7.0"
+#define AppName        "Dictation"
+#define AppVersion     "1.8.0"
 #define AppPublisher   "metawka"
 #define AppURL         "https://github.com/metawka/SuperDictate-win"
-#define AppExeName     "D1CT.exe"
+#define AppExeName     "Dictation.exe"
 
 [Setup]
 AppId={{7B4B2E23-9F3E-4E7B-9E4B-2C1F0C3A5D21}
@@ -27,7 +27,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist
-OutputBaseFilename=D1CT-{#AppVersion}-setup
+OutputBaseFilename=Dictation-{#AppVersion}-setup
 SetupIconFile=..\assets\D1CT.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2/max
@@ -54,15 +54,23 @@ Name: "autostart"; Description: "{cm:AutoStartDescription}"; \
 
 [CustomMessages]
 russian.AutoStartGroup=Автозапуск:
-russian.AutoStartDescription=Запускать D1CT при входе в Windows
-russian.LaunchApp=Запустить D1CT
+russian.AutoStartDescription=Запускать Dictation при входе в Windows
+russian.LaunchApp=Запустить Dictation
 english.AutoStartGroup=Startup:
-english.AutoStartDescription=Start D1CT when I sign in to Windows
-english.LaunchApp=Launch D1CT
+english.AutoStartDescription=Start Dictation when I sign in to Windows
+english.LaunchApp=Launch Dictation
 
 [Files]
-Source: "..\dist\D1CT\*"; DestDir: "{app}"; \
+Source: "..\dist\Dictation\*"; DestDir: "{app}"; \
     Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+; The executable and the shortcuts were named D1CT until 1.8.0. Upgrading
+; in place would otherwise leave a second, stale copy of the app behind
+; and two entries in the Start menu.
+Type: files; Name: "{app}\D1CT.exe"
+Type: files; Name: "{group}\D1CT.lnk"
+Type: files; Name: "{autodesktop}\D1CT.lnk"
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
@@ -74,12 +82,14 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
 ; --minimized so an autostarted copy goes straight to the tray instead of
 ; throwing its control panel at you every login.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
-    ValueType: string; ValueName: "D1CT"; \
+    ValueType: string; ValueName: "{#AppName}"; \
     ValueData: """{app}\{#AppExeName}"" --minimized"; \
     Flags: uninsdeletevalue; Tasks: autostart
-; The app was called SuperDictate before 1.5.0. Its autostart entry points
-; at an executable this installer no longer ships, so it would fail
-; silently at every login if it were left in place.
+; The app was called D1CT before 1.8.0 and SuperDictate before 1.5.0. Those
+; autostart entries point at executables this installer no longer ships, so
+; they would fail silently at every login if left in place.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+    ValueType: none; ValueName: "D1CT"; Flags: deletevalue
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: none; ValueName: "SuperDictate"; Flags: deletevalue
 
@@ -90,7 +100,7 @@ Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchApp}"; \
 [UninstallRun]
 ; The app lives in the tray; a running copy would keep its files locked.
 Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; \
-    Flags: runhidden; RunOnceId: "StopD1CT"
+    Flags: runhidden; RunOnceId: "StopDictation"
 
 [Code]
 // Settings, history and the 640 MB model cache live outside the install

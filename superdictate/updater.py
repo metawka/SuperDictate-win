@@ -33,7 +33,7 @@ REQUEST_TIMEOUT = 15
 
 # The releases this checks are Windows-only, so any installer or archive
 # is the right asset; requiring "win" in the name would reject
-# "D1CT-1.5.0-setup.exe".
+# "Dictation-1.8.0-setup.exe".
 _WINDOWS_ASSET = re.compile(r"\.(exe|msi|zip)$", re.IGNORECASE)
 
 
@@ -66,7 +66,7 @@ def check_latest(timeout: int = REQUEST_TIMEOUT) -> Optional[UpdateInfo]:
         LATEST_RELEASE_URL,
         headers={
             "Accept": "application/vnd.github+json",
-            "User-Agent": f"D1CT-Windows/{VERSION}",
+            "User-Agent": f"Dictation-Windows/{VERSION}",
         },
     )
     try:

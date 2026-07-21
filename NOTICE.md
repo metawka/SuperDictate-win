@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | [Parakey](https://github.com/rcourtman/Parakey) | Richard Courtman | оригинал (macOS, Swift) |
 | [SuperDictate](https://github.com/shlgd/SuperDictate) | shlgd | форк Parakey, от которого взято поведение |
-| D1CT for Windows | metawka | этот порт (Python, PySide6) |
+| Dictation for Windows | metawka | этот порт (Python, PySide6) |
 
 Все три распространяются по лицензии MIT, см. [LICENSE](LICENSE).
 

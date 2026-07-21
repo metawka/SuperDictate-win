@@ -18,6 +18,7 @@ one long undifferentiated form.
 
 from __future__ import annotations
 
+import html
 from typing import Any, Optional
 
 from PySide6.QtCore import Qt, QTimer
@@ -139,10 +140,48 @@ def _shifted(color: str) -> str:
                           min(255, hue.value() + 20)).name()
 
 
+class HintIcon(QLabel):
+    """A question mark that explains the setting next to it on hover.
+
+    The explanations used to sit under their settings as permanent grey
+    paragraphs. Six of them turned a tab of switches into a page of prose,
+    and the longest one (the text styles) described three modes the user
+    had not chosen. The words are unchanged; they are one hover away now.
+    """
+
+    SIZE = 15
+
+    def __init__(self, text: str = "", parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("Hint")
+        self.setPixmap(icons.pixmap("help", palette().text_faint, self.SIZE, 1.7))
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self.set_text(text)
+
+    def set_text(self, text: str) -> None:
+        # Rich text on purpose: Qt only word-wraps a tooltip it considers
+        # rich, and a four-line explanation on one line spans the screen.
+        self.setToolTip(f"<p style='margin:0'>{html.escape(text)}</p>")
+
+
+def _with_hint(widget: QWidget, hint: QWidget, *, stretch: bool) -> QWidget:
+    """Pair a control with its hint icon inside one grid cell."""
+    holder = QWidget()
+    row = QHBoxLayout(holder)
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(8)
+    row.addWidget(widget, 1 if stretch else 0)
+    if not stretch:
+        row.addStretch(1)
+    row.addWidget(hint, 0, Qt.AlignmentFlag.AlignVCenter)
+    return holder
+
+
 class Section(QWidget):
     """A titled card holding a two-column grid of settings."""
 
-    def __init__(self, title: str, parent=None) -> None:
+    def __init__(self, title: str, hint: Optional[str] = None, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("Card")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -153,7 +192,16 @@ class Section(QWidget):
 
         heading = QLabel(title)
         heading.setObjectName("CardTitle")
-        outer.addWidget(heading)
+        if hint:
+            header = QHBoxLayout()
+            header.setContentsMargins(0, 0, 0, 0)
+            header.setSpacing(7)
+            header.addWidget(heading)
+            header.addWidget(HintIcon(hint), 0, Qt.AlignmentFlag.AlignVCenter)
+            header.addStretch(1)
+            outer.addLayout(header)
+        else:
+            outer.addWidget(heading)
 
         self.grid = QGridLayout()
         self.grid.setHorizontalSpacing(14)
@@ -162,7 +210,10 @@ class Section(QWidget):
         outer.addLayout(self.grid)
         self._row = 0
 
-    def add_row(self, label: Optional[str], widget: QWidget) -> None:
+    def add_row(self, label: Optional[str], widget: QWidget,
+                hint: Optional[QWidget] = None) -> None:
+        if hint is not None:
+            widget = _with_hint(widget, hint, stretch=bool(label))
         if label:
             key = QLabel(label)
             key.setObjectName("Key")
@@ -170,13 +221,6 @@ class Section(QWidget):
             self.grid.addWidget(widget, self._row, 1)
         else:
             self.grid.addWidget(widget, self._row, 0, 1, 2)
-        self._row += 1
-
-    def add_caption(self, text: str) -> None:
-        caption = QLabel(text)
-        caption.setObjectName("Caption")
-        caption.setWordWrap(True)
-        self.grid.addWidget(caption, self._row, 0, 1, 2)
         self._row += 1
 
 
@@ -296,19 +340,26 @@ class SettingsWindow(QDialog):
              (PasteSuffix.NONE.value, i18n.tr("settings_suffix_none")),
              (PasteSuffix.NEWLINE.value, i18n.tr("settings_suffix_newline"))],
         )
-        self._text_style = self._combo(
-            recognition, "settings_text_style", "text_style",
-            [(TextStyle.FORMAL.value, i18n.tr("settings_text_style_formal")),
-             (TextStyle.STANDARD.value, i18n.tr("settings_text_style_standard")),
-             (TextStyle.INFORMAL.value, i18n.tr("settings_text_style_informal")),
-             (TextStyle.CASUAL.value, i18n.tr("settings_text_style_casual"))],
-        )
-        recognition.add_caption(i18n.tr("settings_text_style_hint"))
+        # The style hint describes the chosen style only: four descriptions
+        # at once made the reader find their own in a paragraph.
+        self._text_style_hint = HintIcon()
+        self._text_style = QComboBox()
+        for style in (TextStyle.FORMAL, TextStyle.STANDARD,
+                      TextStyle.INFORMAL, TextStyle.CASUAL):
+            self._text_style.addItem(
+                i18n.tr(f"settings_text_style_{style.value}"), style.value)
+        index = self._text_style.findData(str(self._draft.get("text_style", "")))
+        self._text_style.setCurrentIndex(index if index >= 0 else 0)
+        self._text_style.currentIndexChanged.connect(self._text_style_changed)
+        recognition.add_row(i18n.tr("settings_text_style"), self._text_style,
+                            self._text_style_hint)
+        self._text_style_changed()
+
         self._fillers = self._checkbox(
             recognition, "settings_remove_fillers", "remove_filler_words")
         self._digits = self._checkbox(
-            recognition, "settings_numbers_as_digits", "numbers_as_digits")
-        recognition.add_caption(i18n.tr("settings_numbers_as_digits_hint"))
+            recognition, "settings_numbers_as_digits", "numbers_as_digits",
+            i18n.tr("settings_numbers_as_digits_hint"))
 
         capture = Section(i18n.tr("settings_section_capture"))
         devices = [("", i18n.tr("settings_device_default"))]
@@ -317,7 +368,8 @@ class SettingsWindow(QDialog):
             capture, "settings_input_device", "input_device", devices)
 
         self._stop_on_silence = self._checkbox(
-            capture, "settings_stop_on_silence", "stop_on_silence")
+            capture, "settings_stop_on_silence", "stop_on_silence",
+            i18n.tr("settings_stop_on_silence_hint"))
         self._silence_seconds = QDoubleSpinBox()
         self._silence_seconds.setRange(1.0, 10.0)
         self._silence_seconds.setSingleStep(0.5)
@@ -331,7 +383,6 @@ class SettingsWindow(QDialog):
         self._silence_seconds.setEnabled(bool(self._draft.get("stop_on_silence")))
         self._stop_on_silence.toggled.connect(self._silence_seconds.setEnabled)
         capture.add_row(i18n.tr("settings_silence_seconds"), self._silence_seconds)
-        capture.add_caption(i18n.tr("settings_stop_on_silence_hint"))
 
         self._mute = self._checkbox(capture, "settings_mute", "mute_while_recording")
         self._sounds = self._checkbox(capture, "settings_sounds", "play_feedback_sounds")
@@ -353,7 +404,8 @@ class SettingsWindow(QDialog):
         self._waveform = self._checkbox(
             general, "settings_waveform", "show_recording_waveform")
         self._color_row(general, "settings_status_ready_color",
-                        "status_ready_color", AccentColor.GREEN)
+                        "status_ready_color", AccentColor.GREEN,
+                        hint=i18n.tr("settings_color_hint"))
 
         hud = Section("HUD")
         self._hud_size = self._combo(
@@ -363,9 +415,11 @@ class SettingsWindow(QDialog):
              (HUDSize.LARGE.value, i18n.tr("settings_hud_size_large"))],
         )
         self._color_row(hud, "settings_hud_recording_color",
-                        "hud_recording_color", AccentColor.RED)
+                        "hud_recording_color", AccentColor.RED,
+                        hint=i18n.tr("settings_color_hint"))
         self._color_row(hud, "settings_hud_transcribing_color",
-                        "hud_transcribing_color", AccentColor.BLUE)
+                        "hud_transcribing_color", AccentColor.BLUE,
+                        hint=i18n.tr("settings_color_hint"))
         self._hud_background = self._combo(
             hud, "settings_hud_background", "hud_background_style",
             [(HUDBackground.SYSTEM.value, i18n.tr("settings_hud_background_system")),
@@ -373,14 +427,13 @@ class SettingsWindow(QDialog):
              (HUDBackground.LIGHT.value, i18n.tr("settings_hud_background_light"))],
         )
         self._live_preview = self._checkbox(
-            hud, "settings_live_preview", "live_preview")
-        hud.add_caption(i18n.tr("settings_live_preview_hint"))
-        hud.add_caption(i18n.tr("settings_color_hint"))
+            hud, "settings_live_preview", "live_preview",
+            i18n.tr("settings_live_preview_hint"))
         return _page(general, hud)
 
     def _build_corrections_tab(self) -> QWidget:
-        section = Section(i18n.tr("settings_tab_corrections"))
-        section.add_caption(i18n.tr("corrections_note"))
+        section = Section(i18n.tr("settings_tab_corrections"),
+                          i18n.tr("corrections_note"))
 
         self._corrections_list = QListWidget()
         self._corrections_list.setItemDelegate(
@@ -448,6 +501,12 @@ class SettingsWindow(QDialog):
         engine.add_row("ONNX Runtime", self._muted_label(", ".join(providers) or "-"))
         return _page(system, engine)
 
+    def _text_style_changed(self) -> None:
+        value = str(self._text_style.currentData())
+        self._draft.update(text_style=value)
+        self._text_style_hint.set_text(
+            i18n.tr(f"settings_text_style_{value}_hint"))
+
     # -- updates ------------------------------------------------------
 
     def _check_updates(self) -> None:
@@ -485,12 +544,14 @@ class SettingsWindow(QDialog):
         return label
 
     def _color_row(self, section: Section, label_key: str, draft_key: str,
-                   fallback: AccentColor) -> ColorField:
+                   fallback: AccentColor,
+                   hint: Optional[str] = None) -> ColorField:
         spec = ColorSpec.parse(self._draft.get(draft_key), ColorSpec.of(fallback))
         field = ColorField(spec,
                            lambda value, k=draft_key: self._draft.update({k: value}),
                            self._palette)
-        section.add_row(i18n.tr(label_key), field)
+        section.add_row(i18n.tr(label_key), field,
+                        HintIcon(hint) if hint else None)
         return field
 
     def _shortcut_row(self, section: Section, label_key: str,
@@ -518,7 +579,8 @@ class SettingsWindow(QDialog):
             self._controller.listener.reset_state()
 
     def _combo(self, section: Section, label_key: str, draft_key: str,
-               options: list[tuple[str, str]]) -> QComboBox:
+               options: list[tuple[str, str]],
+               hint: Optional[str] = None) -> QComboBox:
         combo = QComboBox()
         for value, label in options:
             combo.addItem(label, value)
@@ -527,14 +589,16 @@ class SettingsWindow(QDialog):
         combo.setCurrentIndex(index if index >= 0 else 0)
         combo.currentIndexChanged.connect(
             lambda _, c=combo, k=draft_key: self._draft.update({k: c.currentData()}))
-        section.add_row(i18n.tr(label_key), combo)
+        section.add_row(i18n.tr(label_key), combo,
+                        HintIcon(hint) if hint else None)
         return combo
 
-    def _checkbox(self, section: Section, label_key: str, draft_key: str) -> QCheckBox:
+    def _checkbox(self, section: Section, label_key: str, draft_key: str,
+                  hint: Optional[str] = None) -> QCheckBox:
         box = QCheckBox(i18n.tr(label_key))
         box.setChecked(bool(self._draft.get(draft_key)))
         box.toggled.connect(lambda value, k=draft_key: self._draft.update({k: value}))
-        section.add_row(None, box)
+        section.add_row(None, box, HintIcon(hint) if hint else None)
         return box
 
     def _add_correction_item(self, correction: Correction) -> None:

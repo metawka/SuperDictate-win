@@ -40,7 +40,7 @@ def main(argv: list[str]) -> int:
 
     paths.ensure_directories()
     log = configure(verbose="--verbose" in argv)
-    log.info("D1CT %s starting", VERSION)
+    log.info("Dictation %s starting", VERSION)
 
     instance = SingleInstance()
     if instance.already_running:
@@ -49,9 +49,9 @@ def main(argv: list[str]) -> int:
         return 0
 
     app = QApplication(argv)
-    app.setApplicationName("D1CT")
-    # No display name: Qt would append " - D1CT" to every window title, and
-    # the control panel already says "D1CT 1.5.0".
+    app.setApplicationName("Dictation")
+    # No display name: Qt would append " - Dictation" to every window title,
+    # and the control panel already says "Dictation 1.8.0".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -111,9 +111,13 @@ class _Windows:
         self._toasts = None
         self.tray = None
         self._failure_message = ""
-        self._preview_clear = QTimer()
-        self._preview_clear.setSingleShot(True)
-        self._preview_clear.timeout.connect(lambda: self.on_preview(""))
+        # How long the finished sentence stays up after it has been pasted:
+        # long enough to read the tail the live preview never got to, short
+        # enough not to linger over the window it was pasted into.
+        self._preview_hold = QTimer()
+        self._preview_hold.setSingleShot(True)
+        self._preview_hold.setInterval(2400)
+        self._preview_hold.timeout.connect(self._end_preview_hold)
 
     # -- notifications --------------------------------------------------
 
@@ -220,6 +224,12 @@ class _Windows:
         if self._bubble is not None:
             self._bubble.configure(background=settings.hud_background_style)
 
+    def _end_preview_hold(self) -> None:
+        """Take the finished sentence and the capsule down together."""
+        self.on_preview("")
+        if self._hud is not None and self._hud.mode != "result":
+            self._hud.hide_hud()
+
     def on_state_changed(self, value: str) -> None:
         if not self._controller.settings.show_recording_waveform:
             if self._hud is not None:
@@ -228,17 +238,21 @@ class _Windows:
             return
         state = AppState(value)
         if state is AppState.RECORDING:
-            self._preview_clear.stop()
+            self._preview_hold.stop()
             self.hud.show_recording()
-        elif state is AppState.TRANSCRIBING:
+            return
+        if state is AppState.TRANSCRIBING:
             self.hud.show_transcribing()
-        elif self._hud is not None and self._hud.mode != "result":
+            return
+        # Idle. The final transcript arrives just before this and starts
+        # the hold, which owns both windows until it expires; without one
+        # the dictation failed or was cancelled and there is nothing left
+        # on screen worth keeping.
+        if self._preview_hold.isActive():
+            return
+        if self._hud is not None and self._hud.mode != "result":
             self._hud.hide_hud()
-        # Back to idle without a final transcript: the job failed or was
-        # cancelled, so nothing else is going to clear the bubble.
-        if state not in (AppState.RECORDING, AppState.TRANSCRIBING) \
-                and not self._preview_clear.isActive():
-            self._preview_clear.start(900)
+        self.on_preview("")
 
     def on_level(self, level: float) -> None:
         if self._hud is not None:
@@ -252,12 +266,12 @@ class _Windows:
             return
         self.bubble.set_text(text)
         if not text:
-            self._preview_clear.stop()
+            self._preview_hold.stop()
         elif self._controller.state is not AppState.RECORDING:
-            # The finished sentence. Long enough to read the tail that the
-            # live preview never got to, short enough not to linger over
-            # the window the text was just pasted into.
-            self._preview_clear.start(2400)
+            # The finished sentence, complete to the last word. The capsule
+            # holds under it for the same beat so the two leave together.
+            self.hud.show_settled()
+            self._preview_hold.start()
 
 
 def _quit(app: QApplication, controller, instance: SingleInstance) -> None:

@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller build for D1CT.
+"""PyInstaller build for Dictation.
 
 One-folder rather than one-file: onnxruntime ships large native DLLs, and
 a one-file build would unpack ~200 MB to a temporary directory on every
@@ -66,7 +66,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="D1CT",
+    name="Dictation",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -82,5 +82,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="D1CT",
+    name="Dictation",
 )

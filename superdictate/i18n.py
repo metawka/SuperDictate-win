@@ -12,7 +12,7 @@ _LANGUAGE = "ru"
 
 _STRINGS: dict[str, tuple[str, str]] = {
     # -- status ------------------------------------------------------
-    "app_name": ("D1CT", "D1CT"),
+    "app_name": ("Dictation", "Dictation"),
     "status_starting": ("Запуск…", "Starting…"),
     "status_downloading": ("Загрузка модели", "Downloading model"),
     "status_loading": ("Загрузка модели в память", "Loading model"),
@@ -60,7 +60,7 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "stats_activity": ("Активность", "Activity"),
 
     # -- settings ----------------------------------------------------
-    "settings_title": ("Настройки D1CT", "D1CT Settings"),
+    "settings_title": ("Настройки Dictation", "Dictation Settings"),
     "settings_tab_hotkeys": ("Сочетания", "Shortcuts"),
     "settings_tab_dictation": ("Диктовка", "Dictation"),
     "settings_tab_appearance": ("Вид", "Appearance"),
@@ -83,14 +83,25 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_text_style_standard": ("Стандартный", "Standard"),
     "settings_text_style_informal": ("Неформальный", "Informal"),
     "settings_text_style_casual": ("Разговорный", "Casual"),
-    "settings_text_style_hint": (
-        "Формальный: как распознала модель. Стандартный: без точки в конце. "
-        "Неформальный: без точки и с маленькой буквы. Разговорный: без "
-        "заглавных вообще, кроме аббревиатур, а точки внутри заменяются "
-        "запятыми.",
-        "Formal: exactly as recognised. Standard: no full stop at the end. "
-        "Informal: no full stop and no leading capital. Casual: no capitals "
-        "at all except acronyms, and inner full stops become commas.",
+    "settings_text_style_formal_hint": (
+        "Текст вставляется ровно таким, каким его распознала модель: "
+        "с заглавной буквы и с точкой в конце.",
+        "The text is inserted exactly as recognised: leading capital, "
+        "full stop at the end.",
+    ),
+    "settings_text_style_standard_hint": (
+        "Точка в конце убирается, всё остальное остаётся как есть.",
+        "The final full stop is dropped, everything else stays.",
+    ),
+    "settings_text_style_informal_hint": (
+        "Точки в конце нет, и первая буква строчная.",
+        "No full stop at the end, and the first letter is lowercase.",
+    ),
+    "settings_text_style_casual_hint": (
+        "Заглавных нет вообще, кроме аббревиатур, а точки внутри фразы "
+        "заменяются запятыми, так что реплика идёт одной строкой.",
+        "No capitals at all except acronyms, and full stops inside the "
+        "sentence become commas, so the line reads as one remark.",
     ),
     "settings_enter_delay": ("Задержка перед Enter, мс", "Delay before Enter, ms"),
     "settings_paste_suffix": ("После вставки", "After insertion"),

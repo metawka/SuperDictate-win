@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Build D1CT into dist\D1CT\D1CT.exe.
+    Build Dictation into dist\Dictation\Dictation.exe.
 
 .DESCRIPTION
     Regenerates the icon, runs the self-tests (a failing port should never
@@ -41,13 +41,13 @@ if (-not $SkipTests) {
 }
 
 Write-Host "Packaging with PyInstaller..." -ForegroundColor Cyan
-& $python -m PyInstaller --noconfirm D1CT.spec
+& $python -m PyInstaller --noconfirm Dictation.spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 
-$exe = "dist\D1CT\D1CT.exe"
+$exe = "dist\Dictation\Dictation.exe"
 if (-not (Test-Path $exe)) { throw "Expected $exe, but it was not produced." }
 
-$size = [math]::Round((Get-ChildItem dist\D1CT -Recurse |
+$size = [math]::Round((Get-ChildItem dist\Dictation -Recurse |
                        Measure-Object -Property Length -Sum).Sum / 1MB, 1)
 Write-Host ""
 Write-Host "Built $exe ($size MB folder)" -ForegroundColor Green
