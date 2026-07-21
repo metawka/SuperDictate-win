@@ -21,8 +21,8 @@ from __future__ import annotations
 import html
 from typing import Any, Optional
 
-from PySide6.QtCore import QPoint, Qt, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QPoint, Qt, QTimer, QUrl
+from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QCheckBox,
@@ -541,13 +541,21 @@ class SettingsWindow(QDialog):
         elif not info.is_newer:
             self._update_label.setText(i18n.tr("update_none"))
         elif not info.has_windows_asset:
+            # Nothing to install, so nothing to open: the page would only
+            # offer a build for another platform.
             self._update_label.setText(
                 f"{i18n.tr('update_available', version=info.version)}, "
                 f"{i18n.tr('update_no_windows_build')}"
             )
         else:
-            self._update_label.setText(
-                i18n.tr("update_available", version=info.version))
+            # The check was asked for by hand, and what follows a found
+            # update is always the same page. Opening it here saves the
+            # step; the label still says what was found, in case the
+            # browser opens behind this window.
+            opened = QDesktopServices.openUrl(QUrl(info.page_url))
+            self._update_label.setText(i18n.tr(
+                "update_opened" if opened else "update_available",
+                version=info.version))
 
     # -- widget helpers -----------------------------------------------
 

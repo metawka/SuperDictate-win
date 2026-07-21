@@ -12,6 +12,7 @@ and it follows the app palette in both light and dark.
 
 from __future__ import annotations
 
+import math
 from datetime import date, timedelta
 
 from PySide6.QtCore import QRectF, Qt
@@ -31,6 +32,11 @@ from .theme import Palette, palette
 
 WEEKS = 17
 BAR_DAYS = 14
+# Where a number stops being read and starts being measured. The tiles are
+# one line of large type in a narrow card, and a word count reaches six
+# digits within a few months of daily use: "125К" fits and is understood
+# at a glance, "125431" is neither.
+COMPACT_FROM = 1000
 
 
 def _card(parent: QWidget | None = None) -> QWidget:
@@ -300,16 +306,47 @@ class StatsPanel(QWidget):
         total = self._usage.totals()
         by_day = {day.day: day.dictations for day in self._usage.all_days()}
 
-        self._tiles["today"].set_value(str(today.dictations),
+        self._tiles["today"].set_value(compact(today.dictations),
                                        i18n.tr("stats_unit_today"))
-        self._tiles["words"].set_value(str(today.words),
+        self._tiles["words"].set_value(compact(today.words),
                                        i18n.tr("stats_unit_words_today"))
-        self._tiles["total"].set_value(str(total.dictations),
-                                       f"{total.words} {i18n.tr('panel_words')}")
+        self._tiles["total"].set_value(
+            compact(total.dictations),
+            f"{compact(total.words)} {i18n.tr('panel_words')}")
         value, unit = _format_duration(total.audio_seconds)
         self._tiles["time"].set_value(value, unit)
         self._bars.set_days(by_day)
         self._grid.set_days(by_day)
+
+
+def compact(value: int) -> str:
+    """1000 and up as "1К" / "1,5К" / "125К" / "2,4М".
+
+    Rounded down, never up: a tile that reads 1,5К for 1590 words is a
+    little modest, one that reads 1,6К for 1550 claims words that were
+    never said, and rounding up also lets 999 999 arrive as "1000К" when
+    it should be "1М".
+
+    The decimal is only kept below ten, where it carries the difference
+    between 1,2К and 1,9К; past that the first two digits already say
+    everything a tile can say.
+    """
+    if value < COMPACT_FROM:
+        return str(value)
+    for limit, key in ((1_000_000_000, "stats_short_billion"),
+                       (1_000_000, "stats_short_million"),
+                       (COMPACT_FROM, "stats_short_thousand")):
+        if value < limit:
+            continue
+        scaled = value / limit
+        if scaled < 10:
+            number = f"{math.floor(scaled * 10) / 10:.1f}".removesuffix(".0")
+        else:
+            number = str(math.floor(scaled))
+        if i18n.language() == "ru":
+            number = number.replace(".", ",")
+        return number + i18n.tr(key)
+    return str(value)
 
 
 def _format_duration(seconds: float) -> tuple[str, str]:

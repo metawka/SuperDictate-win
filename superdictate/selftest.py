@@ -306,6 +306,26 @@ def test_hotkey_json_guards() -> None:
            HotkeyChoice(VK_RCONTROL, 0))
 
 
+def test_compact_numbers() -> None:
+    from . import i18n
+    from .ui.stats import compact
+
+    previous = i18n.language()
+    try:
+        i18n.set_language("ru")
+        _check("compact: below a thousand is left alone", compact(999), "999")
+        _check("compact: exact thousand", compact(1000), "1К")
+        _check("compact: decimal below ten", compact(1590), "1,5К")
+        _check("compact: no decimal past ten", compact(12345), "12К")
+        # Rounding up here would read as "1000К" instead of "1М".
+        _check("compact: rounds down at the boundary", compact(999999), "999К")
+        _check("compact: millions", compact(1250000), "1,2М")
+        i18n.set_language("en")
+        _check("compact: latin suffix and point", compact(1590), "1.5K")
+    finally:
+        i18n.set_language(previous)
+
+
 # -- runner ---------------------------------------------------------------
 
 _TESTS = [
@@ -325,6 +345,7 @@ _TESTS = [
     test_pipeline_order,
     test_settings_round_trip,
     test_hotkey_json_guards,
+    test_compact_numbers,
 ]
 
 

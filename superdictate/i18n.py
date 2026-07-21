@@ -52,6 +52,12 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "stats_today_words": ("Слова", "Words"),
     "stats_total_dictations": ("Всего", "All time"),
     "stats_total_time": ("Наговорено", "Dictated"),
+    # Suffixes for numbers a tile cannot hold in full. Cyrillic К and М in
+    # Russian, so they match the surrounding text rather than sitting in it
+    # as two Latin letters.
+    "stats_short_thousand": ("К", "K"),
+    "stats_short_million": ("М", "M"),
+    "stats_short_billion": ("Б", "B"),
     "stats_unit_today": ("диктовок", "dictations"),
     "stats_unit_words_today": ("слов", "words"),
     "stats_unit_hours": ("времени", "of audio"),
@@ -223,6 +229,10 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "update_checking": ("Проверка…", "Checking…"),
     "update_failed": ("Не удалось проверить обновления", "Update check failed"),
     "update_open": ("Открыть страницу релиза", "Open release page"),
+    "update_opened": (
+        "Доступна версия {version}, страница релиза открыта в браузере",
+        "Version {version} available, the release page is open in the browser",
+    ),
     "update_no_windows_build": (
         "Для Windows сборка ещё не опубликована",
         "No Windows build published yet",
