@@ -49,8 +49,10 @@ ICON_SIZE = 18
 GAP = 10
 RADIUS = 12
 STRIPE = 4
-# Clear of the recording capsule, which owns the bottom centre.
-BOTTOM_RESERVE = 96
+# Bottom right, out of the recording capsule's way: the capsule owns the
+# bottom centre, and a warning stacked on top of it hid the waveform.
+RIGHT_MARGIN = 24
+BOTTOM_MARGIN = 24
 FADE_MS = 180
 DEFAULT_LIFETIME_MS = 4200
 
@@ -202,7 +204,7 @@ class Toast(QWidget):
 
 
 class ToastManager:
-    """Stacks toasts upward from the bottom centre of the active screen."""
+    """Stacks toasts upward from the bottom right of the active screen."""
 
     MAX_VISIBLE = 3
 
@@ -243,10 +245,10 @@ class ToastManager:
         screen = (QApplication.screenAt(_cursor_position())
                   or QApplication.primaryScreen())
         area = screen.availableGeometry()
-        y = area.bottom() - BOTTOM_RESERVE
+        y = area.bottom() - BOTTOM_MARGIN
         for toast in reversed(self._toasts):
             y -= toast.height()
-            toast.move(QPoint(area.center().x() - toast.width() // 2, int(y)))
+            toast.move(QPoint(area.right() - toast.width() - RIGHT_MARGIN, int(y)))
             y -= GAP
 
 
