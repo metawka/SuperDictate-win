@@ -8,7 +8,7 @@
 ;   & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\Dictation.iss
 
 #define AppName        "Dictation"
-#define AppVersion     "1.8.0"
+#define AppVersion     "1.8.1"
 #define AppPublisher   "metawka"
 #define AppURL         "https://github.com/metawka/SuperDictate-win"
 #define AppExeName     "Dictation.exe"

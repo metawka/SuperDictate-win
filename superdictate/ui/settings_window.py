@@ -21,7 +21,7 @@ from __future__ import annotations
 import html
 from typing import Any, Optional
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSpinBox,
     QTabWidget,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -78,6 +79,7 @@ class ColorField(QWidget):
     def __init__(self, spec: ColorSpec, on_change, palette: Palette,
                  parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("Plain")
         self._spec = spec
         self._on_change = on_change
         self._palette = palette
@@ -157,17 +159,35 @@ class HintIcon(QLabel):
         self.setPixmap(icons.pixmap("help", palette().text_faint, self.SIZE, 1.7))
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self._tip = ""
         self.set_text(text)
 
     def set_text(self, text: str) -> None:
         # Rich text on purpose: Qt only word-wraps a tooltip it considers
         # rich, and a four-line explanation on one line spans the screen.
-        self.setToolTip(f"<p style='margin:0'>{html.escape(text)}</p>")
+        self._tip = f"<p style='margin:0'>{html.escape(text)}</p>"
+        self.setToolTip(self._tip)
+
+    def enterEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        # Shown by hand rather than left to Qt, whose wake-up delay is most
+        # of a second: an icon whose only job is to be hovered should not
+        # keep the reader waiting to find out what it says.
+        QToolTip.showText(self.mapToGlobal(QPoint(0, self.height() + 2)),
+                          self._tip, self)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        QToolTip.hideText()
+        super().leaveEvent(event)
 
 
 def _with_hint(widget: QWidget, hint: QWidget, *, stretch: bool) -> QWidget:
     """Pair a control with its hint icon inside one grid cell."""
     holder = QWidget()
+    # Named, and transparent by name: an unnamed QWidget inside a card takes
+    # the window background from the stylesheet and paints a darker slab
+    # across the row.
+    holder.setObjectName("Hint")
     row = QHBoxLayout(holder)
     row.setContentsMargins(0, 0, 0, 0)
     row.setSpacing(8)
@@ -448,6 +468,7 @@ class SettingsWindow(QDialog):
         section.add_row(None, self._corrections_list)
 
         editor = QWidget()
+        editor.setObjectName("Plain")
         row = QHBoxLayout(editor)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)

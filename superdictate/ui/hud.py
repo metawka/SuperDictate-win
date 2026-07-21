@@ -75,7 +75,13 @@ WS_EX_TOOLWINDOW = 0x00000080
 
 
 class RecordingHUD(QWidget):
-    """States: hidden -> recording -> transcribing -> result -> hidden."""
+    """States: hidden -> recording -> transcribing -> result -> hidden.
+
+    The whole HUD leaves the moment the dictation is over, whether or not
+    the live preview was on: holding the finished sentence open for a
+    couple of seconds made the same key press clear the screen at two
+    different speeds depending on a setting.
+    """
 
     # True when the pointer moves over the capsule, false when it leaves.
     # The window is click-through, so this is polled rather than delivered
@@ -176,19 +182,6 @@ class RecordingHUD(QWidget):
         if self._mode == "hidden":
             self.show_recording()
         self._mode = "transcribing"
-        self.update()
-
-    def show_settled(self) -> None:
-        """Stay up, done, while the finished sentence is still on screen.
-
-        The capsule used to vanish the instant the text was pasted, and
-        the bubble above it kept the sentence for another two seconds,
-        so the words hung over an empty screen with nothing under them.
-        Both now leave together; until then the bars just stop dancing.
-        """
-        if self._mode in ("hidden", "hiding", "result"):
-            return
-        self._mode = "settled"
         self.update()
 
     def show_result(self, icon_name: str, color: str) -> None:
@@ -310,12 +303,6 @@ class RecordingHUD(QWidget):
             for index in range(BAR_COUNT):
                 wave = 0.5 + 0.5 * math.sin(self._phase * 2.0 - index * 0.9)
                 self._bar_levels[index] += (0.2 + wave * 0.55 - self._bar_levels[index]) * 0.3
-        elif self._mode == "settled":
-            # Come to rest rather than freeze mid-bounce: the capsule is
-            # finished, and five bars stopped at random heights read as a
-            # hang rather than as an ending.
-            for index in range(BAR_COUNT):
-                self._bar_levels[index] += (0.14 - self._bar_levels[index]) * 0.2
         self.update()
 
     # -- painting -----------------------------------------------------

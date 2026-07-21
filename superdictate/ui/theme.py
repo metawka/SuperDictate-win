@@ -135,7 +135,10 @@ def stylesheet(p: Palette | None = None) -> str:
     #Key   {{ color: {p.text_muted}; background: transparent; }}
     #Value {{ color: {p.text}; font-weight: 600; background: transparent; }}
     #Caption {{ color: {p.text_faint}; font-size: 11px; background: transparent; }}
-    #Hint {{ background: transparent; }}
+    /* Plain containers: a QWidget used only to lay other widgets out takes
+       the window background from the rule above and paints a darker slab
+       over the card it sits in. */
+    #Hint, #Plain {{ background: transparent; }}
     #Metric {{ color: {p.text}; font-size: 26px; font-weight: 700;
                background: transparent; }}
     #MetricUnit {{ color: {p.text_muted}; font-size: 11px; background: transparent; }}

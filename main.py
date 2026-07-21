@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from superdictate import i18n, paths
@@ -51,7 +50,7 @@ def main(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setApplicationName("Dictation")
     # No display name: Qt would append " - Dictation" to every window title,
-    # and the control panel already says "Dictation 1.8.0".
+    # and the control panel already says "Dictation 1.8.1".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -111,13 +110,6 @@ class _Windows:
         self._toasts = None
         self.tray = None
         self._failure_message = ""
-        # How long the finished sentence stays up after it has been pasted:
-        # long enough to read the tail the live preview never got to, short
-        # enough not to linger over the window it was pasted into.
-        self._preview_hold = QTimer()
-        self._preview_hold.setSingleShot(True)
-        self._preview_hold.setInterval(2400)
-        self._preview_hold.timeout.connect(self._end_preview_hold)
 
     # -- notifications --------------------------------------------------
 
@@ -224,12 +216,6 @@ class _Windows:
         if self._bubble is not None:
             self._bubble.configure(background=settings.hud_background_style)
 
-    def _end_preview_hold(self) -> None:
-        """Take the finished sentence and the capsule down together."""
-        self.on_preview("")
-        if self._hud is not None and self._hud.mode != "result":
-            self._hud.hide_hud()
-
     def on_state_changed(self, value: str) -> None:
         if not self._controller.settings.show_recording_waveform:
             if self._hud is not None:
@@ -238,18 +224,16 @@ class _Windows:
             return
         state = AppState(value)
         if state is AppState.RECORDING:
-            self._preview_hold.stop()
             self.hud.show_recording()
             return
         if state is AppState.TRANSCRIBING:
             self.hud.show_transcribing()
             return
-        # Idle. The final transcript arrives just before this and starts
-        # the hold, which owns both windows until it expires; without one
-        # the dictation failed or was cancelled and there is nothing left
-        # on screen worth keeping.
-        if self._preview_hold.isActive():
-            return
+        # Idle. Both windows go now, together. The finished sentence used to
+        # hold the bubble open for another couple of seconds, which made the
+        # whole HUD outlive a dictation with the preview switched on and
+        # vanish immediately with it switched off; the same key press should
+        # not clear the screen at two different speeds.
         if self._hud is not None and self._hud.mode != "result":
             self._hud.hide_hud()
         self.on_preview("")
@@ -265,13 +249,6 @@ class _Windows:
         if not self._controller.settings.show_recording_waveform:
             return
         self.bubble.set_text(text)
-        if not text:
-            self._preview_hold.stop()
-        elif self._controller.state is not AppState.RECORDING:
-            # The finished sentence, complete to the last word. The capsule
-            # holds under it for the same beat so the two leave together.
-            self.hud.show_settled()
-            self._preview_hold.start()
 
 
 def _quit(app: QApplication, controller, instance: SingleInstance) -> None:
