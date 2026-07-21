@@ -289,11 +289,7 @@ class ControlPanel(QMainWindow):
         state = self._controller.state
         settings = self._controller.settings
         self._status_text.setText(i18n.tr(_STATE_LABELS.get(state, "status_starting")))
-        if state is AppState.READY:
-            ready = settings.status_ready_color
-            self._status_dot.set_color(ready.start, ready.end)
-        else:
-            self._status_dot.set_color(self._state_color(state))
+        self._status_dot.set_color(self._state_color(state))
 
         for attribute, label in self._shortcut_labels.items():
             label.setText(hotkey_name(getattr(settings, attribute), i18n.language()))
@@ -316,8 +312,12 @@ class ControlPanel(QMainWindow):
         self._stats.refresh()
 
     def _state_color(self, state: AppState) -> str:
+        # Ready used to be a colour the settings let you pick. It is one
+        # dot on one window, so the choice cost more attention than it was
+        # worth; it is the theme's green now, like every other "fine" here.
         p = self._palette
         return {
+            AppState.READY: p.ok,
             AppState.RECORDING: p.danger,
             AppState.TRANSCRIBING: p.busy,
             AppState.FAILED: p.danger,

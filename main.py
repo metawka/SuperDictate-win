@@ -55,7 +55,7 @@ def main(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setApplicationName("Dictation")
     # No display name: Qt would append " - Dictation" to every window title,
-    # and the control panel already says "Dictation 2.0.0".
+    # and the control panel already says "Dictation 2.0.1".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -218,10 +218,7 @@ class _Windows:
                 size=settings.hud_size,
                 recording=settings.hud_recording_color,
                 transcribing=settings.hud_transcribing_color,
-                background=settings.hud_background_style,
             )
-        if self._bubble is not None:
-            self._bubble.configure(background=settings.hud_background_style)
 
     def on_state_changed(self, value: str) -> None:
         if not self._controller.settings.show_recording_waveform:

@@ -163,11 +163,6 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_hud_size_large": ("Крупный", "Large"),
     "settings_hud_recording_color": ("Цвет записи", "Recording color"),
     "settings_hud_transcribing_color": ("Цвет расшифровки", "Transcribing color"),
-    "settings_hud_background": ("Фон капсулы", "Capsule background"),
-    "settings_hud_background_system": ("Системный", "System"),
-    "settings_hud_background_dark": ("Тёмный", "Dark"),
-    "settings_hud_background_light": ("Светлый", "Light"),
-    "settings_status_ready_color": ("Цвет готовности", "Ready color"),
     "settings_color_gradient": ("Градиент", "Gradient"),
     "settings_color_pick": ("Выбор цвета", "Pick a color"),
     "settings_color_hint": (

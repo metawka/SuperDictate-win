@@ -47,16 +47,22 @@ def _speaker_interface(interface_type):
     since pycaw 2024 it hands back an ``AudioDevice`` wrapper, which has no
     ``Activate``. Calling it regardless is how muting quietly stopped
     working: the AttributeError was caught, logged and swallowed.
-    """
-    from ctypes import POINTER, cast
 
+    The result is obtained through ``QueryInterface`` rather than
+    ``ctypes.cast``. Casting builds a second Python object over the same
+    COM pointer without adding a reference to it, so the two objects
+    together release one reference twice; the object is freed while the
+    app still holds a pointer to it, and the next garbage collection to
+    touch that pointer takes the whole process down with an access
+    violation, far from anything to do with audio.
+    """
     from comtypes import CLSCTX_ALL
     from pycaw.pycaw import AudioUtilities
 
     device = AudioUtilities.GetSpeakers()
     device = getattr(device, "_dev", device)
-    interface = device.Activate(interface_type._iid_, CLSCTX_ALL, None)
-    return cast(interface, POINTER(interface_type))
+    unknown = device.Activate(interface_type._iid_, CLSCTX_ALL, None)
+    return unknown.QueryInterface(interface_type)
 
 
 class OutputMute:

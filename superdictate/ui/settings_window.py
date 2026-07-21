@@ -55,7 +55,6 @@ from ..settings import (
     ColorSpec,
     CompletionBehavior,
     Correction,
-    HUDBackground,
     HUDSize,
     PasteSuffix,
     Settings,
@@ -426,9 +425,6 @@ class SettingsWindow(QDialog):
         )
         self._waveform = self._checkbox(
             general, "settings_waveform", "show_recording_waveform")
-        self._color_row(general, "settings_status_ready_color",
-                        "status_ready_color", AccentColor.GREEN,
-                        hint=i18n.tr("settings_color_hint"))
 
         hud = Section("HUD")
         self._hud_size = self._combo(
@@ -443,12 +439,6 @@ class SettingsWindow(QDialog):
         self._color_row(hud, "settings_hud_transcribing_color",
                         "hud_transcribing_color", AccentColor.BLUE,
                         hint=i18n.tr("settings_color_hint"))
-        self._hud_background = self._combo(
-            hud, "settings_hud_background", "hud_background_style",
-            [(HUDBackground.SYSTEM.value, i18n.tr("settings_hud_background_system")),
-             (HUDBackground.DARK.value, i18n.tr("settings_hud_background_dark")),
-             (HUDBackground.LIGHT.value, i18n.tr("settings_hud_background_light"))],
-        )
         self._live_preview = self._checkbox(
             hud, "settings_live_preview", "live_preview",
             i18n.tr("settings_live_preview_hint"))

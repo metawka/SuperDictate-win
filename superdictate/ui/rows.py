@@ -2,7 +2,7 @@
 
 Both lists used to be plain ``QListWidget`` items: one string per row,
 built by gluing the fields together with spaces ("21.07 09:12   Привет")
-or an arrow ("гит хаб  →  GitHub"). That renders as a single run of text
+or an arrow ("слышится как  →  заменить на"). That renders as one run of text
 in a bordered box, so the timestamp competes with the transcript for
 attention, a long line pushes a horizontal scrollbar under the list, and
 the whole thing reads as a text area rather than a list of things.

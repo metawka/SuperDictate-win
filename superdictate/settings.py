@@ -67,12 +67,6 @@ class HUDSize(str, Enum):
         return {"compact": 1.15, "standard": 1.5, "large": 1.85}[self.value]
 
 
-class HUDBackground(str, Enum):
-    SYSTEM = "system"
-    DARK = "dark"
-    LIGHT = "light"
-
-
 class AccentColor(str, Enum):
     RED = "red"
     ORANGE = "orange"
@@ -208,8 +202,6 @@ _DEFAULTS: dict[str, Any] = {
     "live_preview": True,
     "hud_recording_color": AccentColor.RED.value,
     "hud_transcribing_color": AccentColor.BLUE.value,
-    "status_ready_color": AccentColor.GREEN.value,
-    "hud_background_style": HUDBackground.SYSTEM.value,
     "hud_size": HUDSize.STANDARD.value,
     "mute_while_recording": False,
     "pause_media_while_recording": False,
@@ -349,15 +341,6 @@ class Settings:
     def hud_transcribing_color(self) -> ColorSpec:
         return ColorSpec.parse(self._get("hud_transcribing_color"),
                                ColorSpec.of(AccentColor.BLUE))
-
-    @property
-    def status_ready_color(self) -> ColorSpec:
-        return ColorSpec.parse(self._get("status_ready_color"),
-                               ColorSpec.of(AccentColor.GREEN))
-
-    @property
-    def hud_background_style(self) -> HUDBackground:
-        return _enum_or(HUDBackground, self._get("hud_background_style"), HUDBackground.SYSTEM)
 
     @property
     def hud_size(self) -> HUDSize:

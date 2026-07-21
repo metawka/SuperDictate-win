@@ -45,7 +45,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QApplication, QWidget
 
-from ..settings import AccentColor, ColorSpec, HUDBackground, HUDSize
+from ..settings import AccentColor, ColorSpec, HUDSize
 from . import icons
 
 BASE_WIDTH = 64.0
@@ -65,6 +65,14 @@ HOVER_POLL_MS = 120
 # microphone for speech that came back empty. It used to be amber, which
 # read as an error; neither case is one, and white matches the accent.
 RESULT_COLOR = "#ffffff"
+# The capsule and the transcript bubble are always dark. There used to be a
+# light rendering and a setting to pick between it, the dark one and one
+# that followed the Windows theme; a white capsule over a light window is
+# nearly invisible, and it is a floating overlay rather than part of any
+# window, so it has no theme to agree with in the first place.
+CAPSULE_FILL = QColor(28, 28, 30, 214)
+CAPSULE_BORDER = QColor(255, 255, 255, 38)
+BUBBLE_TEXT = QColor(236, 236, 240)
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 # The HWND argument must be declared, or ctypes passes it as a c_int.
@@ -115,7 +123,6 @@ class RecordingHUD(QWidget):
         self.size_preset = HUDSize.STANDARD
         self.recording_color = ColorSpec.of(AccentColor.RED)
         self.transcribing_color = ColorSpec.of(AccentColor.BLUE)
-        self.background_style = HUDBackground.SYSTEM
 
         self._frame_timer = QTimer(self)
         self._frame_timer.setInterval(FRAME_INTERVAL_MS)
@@ -147,11 +154,10 @@ class RecordingHUD(QWidget):
     # -- configuration ------------------------------------------------
 
     def configure(self, *, size: HUDSize, recording: ColorSpec,
-                  transcribing: ColorSpec, background: HUDBackground) -> None:
+                  transcribing: ColorSpec) -> None:
         self.size_preset = size
         self.recording_color = recording
         self.transcribing_color = transcribing
-        self.background_style = background
         self._apply_size()
         self.update()
 
@@ -368,14 +374,7 @@ class RecordingHUD(QWidget):
         painter.end()
 
     def _background_colors(self) -> tuple[QColor, QColor]:
-        style = self.background_style
-        if style is HUDBackground.SYSTEM:
-            dark = _system_is_dark()
-        else:
-            dark = style is HUDBackground.DARK
-        if dark:
-            return QColor(28, 28, 30, 214), QColor(255, 255, 255, 38)
-        return QColor(250, 250, 252, 224), QColor(0, 0, 0, 30)
+        return CAPSULE_FILL, CAPSULE_BORDER
 
 
 class TranscriptBubble(QWidget):
@@ -413,7 +412,6 @@ class TranscriptBubble(QWidget):
         self._anchor = anchor
         self._text = ""
         self._opacity = 0.0
-        self.background_style = HUDBackground.SYSTEM
 
         # Segoe UI Variable Display is the Windows 11 face cut for short
         # runs of large-ish text; it is noticeably cleaner here than the
@@ -430,10 +428,6 @@ class TranscriptBubble(QWidget):
         self._fade.finished.connect(self._fade_finished)
         self._shape = QPropertyAnimation(self, b"geometry", self)
         self.resize(self.MIN_WIDTH, self.HEIGHT)
-
-    def configure(self, *, background: HUDBackground) -> None:
-        self.background_style = background
-        self.update()
 
     def set_anchor(self, anchor: QWidget) -> None:
         self._anchor = anchor
@@ -556,19 +550,17 @@ class TranscriptBubble(QWidget):
 
         rect = QRectF(0.5, 0.5, self.width() - 1.0, self.height() - 1.0)
         radius = rect.height() / 2.0
-        background, border, text_color = _bubble_colors(self.background_style)
-
         path = QPainterPath()
         path.addRoundedRect(rect, radius, radius)
-        painter.fillPath(path, background)
-        painter.setPen(QPen(border, 1.0))
+        painter.fillPath(path, CAPSULE_FILL)
+        painter.setPen(QPen(CAPSULE_BORDER, 1.0))
         painter.drawPath(path)
 
         inner = rect.adjusted(self.PADDING, 0, -self.PADDING, 0)
         elided = self.fontMetrics().elidedText(
             self._text, Qt.TextElideMode.ElideLeft, int(inner.width())
         )
-        painter.setPen(text_color)
+        painter.setPen(BUBBLE_TEXT)
         painter.drawText(inner,
                          Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                          elided)
@@ -586,30 +578,6 @@ def _seeded(target: QRect, scale: float = 0.86) -> QRect:
     height = max(1, int(target.height() * (scale - 0.16)))
     return QRect(target.center().x() - width // 2,
                  target.center().y() - height // 2, width, height)
-
-
-def _bubble_colors(style: HUDBackground) -> tuple[QColor, QColor, QColor]:
-    dark = _system_is_dark() if style is HUDBackground.SYSTEM \
-        else style is HUDBackground.DARK
-    if dark:
-        return (QColor(28, 28, 30, 214), QColor(255, 255, 255, 38),
-                QColor(236, 236, 240))
-    return (QColor(250, 250, 252, 224), QColor(0, 0, 0, 30),
-            QColor(28, 28, 32))
-
-
-def _system_is_dark() -> bool:
-    try:
-        import winreg
-
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-        ) as key:
-            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-            return not bool(value)
-    except OSError:
-        return True
 
 
 def _cursor_position() -> QPoint:
