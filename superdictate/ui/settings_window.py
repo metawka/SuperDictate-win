@@ -67,6 +67,11 @@ from .recorder import ShortcutRecorderDialog
 from .rows import PRIMARY_ROLE, SECONDARY_ROLE, CorrectionRowDelegate
 from .theme import Palette, palette, stylesheet
 
+# Four across: the filler words are short, and three columns made the list
+# thirteen rows tall, which is most of the dialog for one setting.
+FILLER_COLUMNS = 4
+DROP_BUTTON_SIZE = 18
+
 
 class ColorField(QWidget):
     """A colour, or two of them for a gradient.
@@ -668,6 +673,11 @@ class SettingsWindow(QDialog):
         self._filler_grid = QGridLayout()
         self._filler_grid.setHorizontalSpacing(12)
         self._filler_grid.setVerticalSpacing(4)
+        # Equal shares, set once: without them the columns are as wide as
+        # whatever happens to be in them, so one long word dragged the rest
+        # of the grid sideways.
+        for column in range(FILLER_COLUMNS):
+            self._filler_grid.setColumnStretch(column, 1)
         panel.addLayout(self._filler_grid)
 
         adder = QHBoxLayout()
@@ -725,33 +735,40 @@ class SettingsWindow(QDialog):
 
         words = [word for word, _ in PRESET_FILLERS] + self._filler_custom
         custom = {word.lower() for word in self._filler_custom}
-        # Four across: the words are short, and three columns made the list
-        # thirteen rows tall, which is most of the dialog for one setting.
-        columns = 4
         for index, word in enumerate(words):
             box = QCheckBox(word)
             box.setChecked(word.lower() in self._filler_enabled)
             box.toggled.connect(
                 lambda value, w=word: self._set_filler_enabled(w, value))
+
+            # Every word gets the same cell, whether it can be deleted or
+            # not, and the delete button occupies the same width whether it
+            # is there or not. A cell that changed shape when a word was
+            # added moved every word after it.
+            cell = QWidget()
+            cell.setObjectName("Plain")
+            line = QHBoxLayout(cell)
+            line.setContentsMargins(0, 0, 0, 0)
+            line.setSpacing(4)
+            line.addWidget(box)
+            line.addStretch(1)
+            drop = QPushButton()
+            drop.setObjectName("Link")
+            drop.setFixedSize(DROP_BUTTON_SIZE, DROP_BUTTON_SIZE)
             if word.lower() in custom:
-                cell = QWidget()
-                cell.setObjectName("Plain")
-                line = QHBoxLayout(cell)
-                line.setContentsMargins(0, 0, 0, 0)
-                line.setSpacing(4)
-                drop = QPushButton()
-                drop.setObjectName("Link")
                 drop.setIcon(icons.icon("close", self._palette.text_faint, 12))
                 drop.setCursor(Qt.CursorShape.PointingHandCursor)
                 drop.setToolTip(i18n.tr("corrections_remove"))
                 drop.clicked.connect(lambda _=False, w=word: self._drop_filler_word(w))
-                line.addWidget(box)
-                line.addWidget(drop)
-                line.addStretch(1)
-                widget: QWidget = cell
             else:
-                widget = box
-            self._filler_grid.addWidget(widget, index // columns, index % columns)
+                # A spacer wearing a button's clothes: keeps the columns
+                # identical without pretending presets can be removed.
+                drop.setEnabled(False)
+                drop.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            line.addWidget(drop)
+
+            self._filler_grid.addWidget(cell, index // FILLER_COLUMNS,
+                                        index % FILLER_COLUMNS)
 
     def _set_filler_enabled(self, word: str, enabled: bool) -> None:
         if enabled:

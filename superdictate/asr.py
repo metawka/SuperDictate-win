@@ -226,6 +226,14 @@ class SpeechModel:
 
     def _download(self, report: Callable[[Progress], None]) -> None:
         from huggingface_hub import snapshot_download
+        from huggingface_hub.utils import disable_progress_bars
+
+        # The hub draws its own tqdm bar on stderr. A windowed build has no
+        # stderr at all, so the bar's first write ended the download with
+        # "'NoneType' object has no attribute 'write'" before a single byte
+        # had been fetched. The progress the user sees comes from the
+        # watcher below, so the bar is not wanted here in any case.
+        disable_progress_bars()
 
         target = _model_dir(self.quantization)
         total = MODEL_TOTAL_BYTES[self.quantization]

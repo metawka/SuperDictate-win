@@ -19,6 +19,7 @@ def configure(verbose: bool = False) -> logging.Logger:
     if _configured:
         return logger
 
+    _guard_standard_streams()
     paths.ensure_directories()
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     formatter = logging.Formatter(
@@ -32,8 +33,9 @@ def configure(verbose: bool = False) -> logging.Logger:
     logger.addHandler(file_handler)
 
     # A windowed PyInstaller build has no stderr; guard so logging never
-    # becomes the thing that crashes the app.
-    if sys.stderr is not None:
+    # becomes the thing that crashes the app, and do not bother handing
+    # lines to the placeholder that replaced it.
+    if sys.stderr is not None and not isinstance(sys.stderr, _NullStream):
         stream = logging.StreamHandler(sys.stderr)
         stream.setFormatter(formatter)
         logger.addHandler(stream)
@@ -42,6 +44,38 @@ def configure(verbose: bool = False) -> logging.Logger:
     _enable_crash_dump()
     _configured = True
     return logger
+
+
+class _NullStream:
+    """Somewhere for output to go when the process has nowhere.
+
+    A windowed build starts with ``sys.stdout`` and ``sys.stderr`` set to
+    ``None``, and a library that prints — huggingface_hub draws a download
+    bar, for one — dies on ``None.write`` and takes its caller's work with
+    it. The app's own logging goes to a file either way, so nothing is
+    lost by swallowing this.
+    """
+
+    encoding = "utf-8"
+
+    def write(self, text: str) -> int:
+        return len(text)
+
+    def flush(self) -> None:
+        pass
+
+    def isatty(self) -> bool:
+        return False
+
+    def fileno(self) -> int:
+        raise OSError("no file descriptor")
+
+
+def _guard_standard_streams() -> None:
+    if sys.stdout is None:
+        sys.stdout = _NullStream()
+    if sys.stderr is None:
+        sys.stderr = _NullStream()
 
 
 def _enable_crash_dump() -> None:
