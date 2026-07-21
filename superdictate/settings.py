@@ -217,6 +217,7 @@ _DEFAULTS: dict[str, Any] = {
     "check_for_updates": True,
     "dictation_language": "auto",
     "remove_filler_words": False,
+    "numbers_as_digits": True,
     "stop_on_silence": False,
     "silence_stop_seconds": 2.5,
     "start_at_login": False,
@@ -385,6 +386,10 @@ class Settings:
     @property
     def remove_filler_words(self) -> bool:
         return bool(self._get("remove_filler_words"))
+
+    @property
+    def numbers_as_digits(self) -> bool:
+        return bool(self._get("numbers_as_digits"))
 
     @property
     def stop_on_silence(self) -> bool:

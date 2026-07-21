@@ -103,6 +103,12 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_device_default": ("Системное по умолчанию", "System default"),
     "settings_remove_fillers": ("Убирать слова-паразиты (um, uh)",
                                 "Remove filler words (um, uh)"),
+    "settings_numbers_as_digits": ("Числа цифрами",
+                                   "Numbers as digits"),
+    "settings_numbers_as_digits_hint": (
+        "«Двадцать три» превращается в «23». Работает до 999.",
+        "\"Twenty three\" becomes \"23\". Works up to 999.",
+    ),
     "settings_mute": ("Отключать звук системы во время записи",
                       "Mute system output while recording"),
     "settings_stop_on_silence": (
@@ -161,10 +167,6 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_compute_cpu": ("CPU", "CPU"),
     "settings_save_restart": ("Сохранить и перезапустить", "Save and restart"),
     "settings_cancel": ("Отмена", "Cancel"),
-    "settings_draft_note": (
-        "Изменения применятся после «Сохранить и перезапустить».",
-        "Changes apply when you click Save and restart.",
-    ),
 
     # -- shortcut recorder ------------------------------------------
     "recorder_title": ("Новое сочетание", "Record shortcut"),

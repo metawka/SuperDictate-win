@@ -74,7 +74,14 @@ class DictationController(QObject):
     level_changed = Signal(float)
     preview_changed = Signal(str)         # partial text while recording
     transcript_ready = Signal(str)
+    # Something is wrong with the machine, not with what was said: no
+    # microphone, no keyboard hook, no model. These outlive the moment and
+    # go to the Windows notification centre.
     error_raised = Signal(str)
+    # The dictation itself came to nothing. Reported on the capsule, which
+    # the user is already looking at, and gone a few seconds later.
+    # Carries (icon name, message).
+    dictation_failed = Signal(str, str)
     history_toggle_requested = Signal()
     settings_applied = Signal()
 
@@ -287,7 +294,7 @@ class DictationController(QObject):
     def finish_recording(self, behavior: CompletionBehavior) -> None:
         if self.state is not AppState.RECORDING:
             return
-        self._stop_preview()
+        self._stop_preview(clear=False)
         samples = self.recorder.stop()
         self.output_mute.restore()
         audio.clear_pending_dictation()
@@ -302,7 +309,7 @@ class DictationController(QObject):
             # hotkey looks dead until it is pressed a third time.
             self.listener.reset_toggle()
             self._set_state(AppState.READY)
-            self.error_raised.emit(i18n.tr("error_too_short"))
+            self.dictation_failed.emit("clock", i18n.tr("error_too_short"))
             return
 
         self._set_state(AppState.TRANSCRIBING)
@@ -335,11 +342,19 @@ class DictationController(QObject):
         threading.Thread(target=self._preview_loop, args=(stop,),
                          name="live-preview", daemon=True).start()
 
-    def _stop_preview(self) -> None:
+    def _stop_preview(self, *, clear: bool = True) -> None:
+        """End the preview loop. ``clear`` also wipes what it last showed.
+
+        A finished recording keeps its last preview on screen: the words
+        are about to be replaced by the real transcription, and blanking
+        the bubble for the second or two in between reads as the app
+        having thrown the dictation away.
+        """
         stop, self._preview_stop = self._preview_stop, None
         if stop is not None:
             stop.set()
-            self.preview_changed.emit("")
+            if clear:
+                self.preview_changed.emit("")
 
     def _preview_loop(self, stop: threading.Event) -> None:
         """Re-transcribe the recording so far, over and over, until it ends.
@@ -375,6 +390,7 @@ class DictationController(QObject):
                 language=self.settings.dictation_language,
                 corrections=self.corrections.all(),
                 strip_fillers=self.settings.remove_filler_words,
+                digits=self.settings.numbers_as_digits,
                 style=self.settings.text_style,
             )
             if text and self.recorder.elapsed > PREVIEW_WINDOW_SECONDS:
@@ -413,6 +429,7 @@ class DictationController(QObject):
             language=self.settings.dictation_language,
             corrections=self.corrections.all(),
             strip_fillers=self.settings.remove_filler_words,
+            digits=self.settings.numbers_as_digits,
             style=self.settings.text_style,
         )
         log.info(
@@ -423,8 +440,13 @@ class DictationController(QObject):
         )
 
         if not text:
-            self.error_raised.emit(i18n.tr("error_no_speech"))
+            self.dictation_failed.emit("mic", i18n.tr("error_no_speech"))
             return
+
+        # The preview stopped a beat before the recording did, so its last
+        # words are missing. This is the same sentence, complete.
+        if self.settings.live_preview and not job.recovered:
+            self.preview_changed.emit(text)
 
         self.history.add(HistoryEntry(
             text=text,

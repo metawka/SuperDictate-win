@@ -29,6 +29,7 @@ from .settings import Correction, TextStyle
 from .textproc import (
     apply_corrections,
     apply_text_style,
+    numbers_as_digits,
     process_transcript,
     remove_filler_words,
     repair_model_text,
@@ -230,6 +231,32 @@ def test_casual_style() -> None:
            "вчера москва не спала")
 
 
+def test_numbers_as_digits() -> None:
+    _check("digits: a unit", numbers_as_digits("дай два", "ru"), "дай 2")
+    _check("digits: tens plus units",
+           numbers_as_digits("двадцать три", "ru"), "23")
+    _check("digits: three places",
+           numbers_as_digits("сто двадцать три", "ru"), "123")
+    _check("digits: hundreds straight to units",
+           numbers_as_digits("двести пять", "ru"), "205")
+    _check("digits: a teen absorbs nothing after it",
+           numbers_as_digits("пятнадцать пять", "ru"), "15 5")
+    _check("digits: feminine and neuter forms",
+           numbers_as_digits("одна две одно", "ru"), "1 2 1")
+    # Only the nominative is converted. "Из двух часов" would become
+    # "из 2 часов", which is not how anyone writes it.
+    _check("digits: oblique cases are left as words",
+           numbers_as_digits("из двух часов", "ru"), "из двух часов")
+    _check("digits: equal places stay apart, as in a dictated code",
+           numbers_as_digits("два три", "ru"), "2 3")
+    _check("digits: punctuation separates numbers",
+           numbers_as_digits("двадцать, три", "ru"), "20, 3")
+    _check("digits: english",
+           numbers_as_digits("twenty three files", "en"), "23 files")
+    _check("digits: words that are not numerals are untouched",
+           numbers_as_digits("привет мир", "ru"), "привет мир")
+
+
 def test_pipeline_order() -> None:
     # An explicit correction must win over filler stripping.
     text, applied, removed = process_transcript(
@@ -294,6 +321,7 @@ _TESTS = [
     test_filler_removal,
     test_text_style,
     test_casual_style,
+    test_numbers_as_digits,
     test_pipeline_order,
     test_settings_round_trip,
     test_hotkey_json_guards,

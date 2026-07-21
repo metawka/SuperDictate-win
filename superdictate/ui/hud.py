@@ -31,11 +31,13 @@ from PySide6.QtCore import (
     QRectF,
     Qt,
     QTimer,
+    Signal,
 )
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
 from ..settings import AccentColor, ColorSpec, HUDBackground, HUDSize
+from . import icons
 
 BASE_WIDTH = 64.0
 BASE_HEIGHT = 38.0
@@ -46,6 +48,10 @@ TARGET_REFRESH_INTERVAL_MS = 700
 BOTTOM_MARGIN = 24
 FRAME_INTERVAL_MS = 16  # ~60 fps
 BAR_COUNT = 5
+# How long the outcome glyph stays up after a dictation that produced
+# nothing, and how often the cursor is checked against the capsule.
+RESULT_HOLD_MS = 3600
+HOVER_POLL_MS = 120
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 # The HWND argument must be declared, or ctypes passes it as a c_int.
@@ -60,7 +66,12 @@ WS_EX_TOOLWINDOW = 0x00000080
 
 
 class RecordingHUD(QWidget):
-    """States: hidden -> recording -> transcribing -> hidden."""
+    """States: hidden -> recording -> transcribing -> result -> hidden."""
+
+    # True when the pointer moves over the capsule, false when it leaves.
+    # The window is click-through, so this is polled rather than delivered
+    # as enter/leave events, which never arrive with WS_EX_TRANSPARENT.
+    hover_changed = Signal(bool)
 
     def __init__(self) -> None:
         super().__init__(None)
@@ -98,7 +109,21 @@ class RecordingHUD(QWidget):
         self._fade = QPropertyAnimation(self, b"fadeOpacity", self)
         self._fade.finished.connect(self._fade_finished)
 
+        self._result_icon = ""
+        self._result_color = "#ff9f0a"
+        self._hovered = False
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setInterval(HOVER_POLL_MS)
+        self._hover_timer.timeout.connect(self._poll_hover)
+        self._hold_timer = QTimer(self)
+        self._hold_timer.setSingleShot(True)
+        self._hold_timer.timeout.connect(self._result_expired)
+
         self._apply_size()
+
+    @property
+    def mode(self) -> str:
+        return self._mode
 
     # -- configuration ------------------------------------------------
 
@@ -144,11 +169,52 @@ class RecordingHUD(QWidget):
         self._mode = "transcribing"
         self.update()
 
+    def show_result(self, icon_name: str, color: str) -> None:
+        """Report the outcome in place of the waveform.
+
+        A dictation that produced no text used to raise the same kind of
+        card as "the microphone is unplugged", which is the wrong weight
+        for something the user fixes by speaking again. The capsule they
+        are already looking at says it instead, and the reason is one
+        hover away.
+        """
+        self._result_icon = icon_name
+        self._result_color = color
+        self._mode = "result"
+        self._frame_timer.stop()
+        self._reposition()
+        self._make_click_through()
+        self.show()
+        self._follow_timer.start()
+        self._hover_timer.start()
+        self._hold_timer.start(RESULT_HOLD_MS)
+        self._animate_to(1.0, ANIMATE_IN_SECONDS)
+        self.update()
+
+    def _result_expired(self) -> None:
+        # Still being read: keep it up rather than yanking the explanation
+        # out from under the pointer.
+        if self._hovered:
+            self._hold_timer.start(RESULT_HOLD_MS)
+            return
+        self.hide_hud()
+
+    def _poll_hover(self) -> None:
+        inside = self.isVisible() and self.geometry().contains(_cursor_position())
+        if inside != self._hovered:
+            self._hovered = inside
+            self.hover_changed.emit(inside)
+
     def hide_hud(self) -> None:
         if self._mode == "hidden":
             return
         self._mode = "hiding"
         self._follow_timer.stop()
+        self._hold_timer.stop()
+        self._hover_timer.stop()
+        if self._hovered:
+            self._hovered = False
+            self.hover_changed.emit(False)
         self._animate_to(0.0, ANIMATE_OUT_SECONDS)
 
     def set_level(self, level: float) -> None:
@@ -239,6 +305,15 @@ class RecordingHUD(QWidget):
         painter.fillPath(path, background)
         painter.setPen(QPen(border, 1.0))
         painter.drawPath(path)
+
+        if self._mode == "result":
+            glyph = int(min(self.width(), self.height()) * 0.56)
+            painter.drawPixmap(
+                int((self.width() - glyph) / 2), int((self.height() - glyph) / 2),
+                icons.pixmap(self._result_icon, self._result_color, glyph, 2.0),
+            )
+            painter.end()
+            return
 
         spec = (self.recording_color if self._mode == "recording"
                 else self.transcribing_color)

@@ -76,10 +76,14 @@ def main(argv: list[str]) -> int:
         log.warning("No system tray available; the control panel is the only surface")
     tray.show()
 
+    windows.tray = tray
     controller.history_toggle_requested.connect(windows.toggle_history)
-    # On-screen rather than through the Windows notification centre: a
-    # banner that Focus Assist defers is a banner the user never sees.
-    controller.error_raised.connect(windows.show_warning)
+    # Anything wrong with the machine goes to the Windows notification
+    # centre, where it stays until it is read: "no microphone" is worth
+    # coming back to. Anything wrong with the dictation itself goes to the
+    # capsule instead, and is gone with it.
+    controller.error_raised.connect(windows.show_system_notification)
+    controller.dictation_failed.connect(windows.show_dictation_failure)
     controller.transcript_ready.connect(lambda _: windows.refresh_history())
     controller.state_changed.connect(windows.on_state_changed)
     controller.level_changed.connect(windows.on_level)
@@ -105,6 +109,11 @@ class _Windows:
         self._hud = None
         self._bubble = None
         self._toasts = None
+        self.tray = None
+        self._failure_message = ""
+        self._preview_clear = QTimer()
+        self._preview_clear.setSingleShot(True)
+        self._preview_clear.timeout.connect(lambda: self.on_preview(""))
 
     # -- notifications --------------------------------------------------
 
@@ -120,6 +129,27 @@ class _Windows:
         from superdictate.ui.toast import Level
 
         self.toasts.show(message, Level.WARNING)
+
+    def show_system_notification(self, message: str) -> None:
+        """A Windows notification, so it survives being missed."""
+        from PySide6.QtWidgets import QSystemTrayIcon
+
+        if self.tray is not None and QSystemTrayIcon.supportsMessages():
+            self.tray.showMessage(
+                i18n.tr("app_name"), message,
+                QSystemTrayIcon.MessageIcon.Warning, 8000)
+            return
+        # No notification centre to talk to: better an on-screen card than
+        # a message that never appears at all.
+        self.show_warning(message)
+
+    def show_dictation_failure(self, icon_name: str, message: str) -> None:
+        if not self._controller.settings.show_recording_waveform:
+            self.show_warning(message)
+            return
+        self._failure_message = message
+        self.on_preview("")
+        self.hud.show_result(icon_name, "#ff9f0a")
 
     # -- panel / settings / history ------------------------------------
 
@@ -161,8 +191,13 @@ class _Windows:
             from superdictate.ui.hud import RecordingHUD
 
             self._hud = RecordingHUD()
+            self._hud.hover_changed.connect(self._on_hud_hover)
             self._apply_hud_settings()
         return self._hud
+
+    def _on_hud_hover(self, inside: bool) -> None:
+        """Explain the outcome glyph in the bubble the preview text uses."""
+        self.bubble.set_text(self._failure_message if inside else "")
 
     @property
     def bubble(self):
@@ -193,13 +228,17 @@ class _Windows:
             return
         state = AppState(value)
         if state is AppState.RECORDING:
+            self._preview_clear.stop()
             self.hud.show_recording()
         elif state is AppState.TRANSCRIBING:
             self.hud.show_transcribing()
-        elif self._hud is not None:
+        elif self._hud is not None and self._hud.mode != "result":
             self._hud.hide_hud()
-        if state is not AppState.RECORDING:
-            self.on_preview("")
+        # Back to idle without a final transcript: the job failed or was
+        # cancelled, so nothing else is going to clear the bubble.
+        if state not in (AppState.RECORDING, AppState.TRANSCRIBING) \
+                and not self._preview_clear.isActive():
+            self._preview_clear.start(900)
 
     def on_level(self, level: float) -> None:
         if self._hud is not None:
@@ -212,6 +251,13 @@ class _Windows:
         if not self._controller.settings.show_recording_waveform:
             return
         self.bubble.set_text(text)
+        if not text:
+            self._preview_clear.stop()
+        elif self._controller.state is not AppState.RECORDING:
+            # The finished sentence. Long enough to read the tail that the
+            # live preview never got to, short enough not to linger over
+            # the window the text was just pasted into.
+            self._preview_clear.start(2400)
 
 
 def _quit(app: QApplication, controller, instance: SingleInstance) -> None:

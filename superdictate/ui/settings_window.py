@@ -237,11 +237,6 @@ class SettingsWindow(QDialog):
                               i18n.tr(label_key))
         layout.addWidget(self._tabs)
 
-        note = QLabel(i18n.tr("settings_draft_note"))
-        note.setObjectName("Caption")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -311,6 +306,9 @@ class SettingsWindow(QDialog):
         recognition.add_caption(i18n.tr("settings_text_style_hint"))
         self._fillers = self._checkbox(
             recognition, "settings_remove_fillers", "remove_filler_words")
+        self._digits = self._checkbox(
+            recognition, "settings_numbers_as_digits", "numbers_as_digits")
+        recognition.add_caption(i18n.tr("settings_numbers_as_digits_hint"))
 
         capture = Section(i18n.tr("settings_section_capture"))
         devices = [("", i18n.tr("settings_device_default"))]

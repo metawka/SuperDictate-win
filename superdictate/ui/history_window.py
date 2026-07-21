@@ -26,7 +26,9 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QStackedWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from .. import i18n, inject
@@ -39,6 +41,23 @@ user32 = ctypes.WinDLL("user32", use_last_error=True)
 user32.GetForegroundWindow.restype = wt.HWND
 user32.SetForegroundWindow.argtypes = [wt.HWND]
 user32.SetForegroundWindow.restype = wt.BOOL
+
+
+def _empty_state(label: QLabel, palette) -> QWidget:
+    """A muted microphone over the caption, centred in the whole area."""
+    page = QWidget()
+    layout = QVBoxLayout(page)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(10)
+    layout.addStretch(1)
+
+    glyph = QLabel()
+    glyph.setPixmap(icons.pixmap("mic", palette.text_faint, 34))
+    glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    layout.addWidget(glyph)
+    layout.addWidget(label)
+    layout.addStretch(1)
+    return page
 
 
 class HistoryWindow(QDialog):
@@ -66,7 +85,19 @@ class HistoryWindow(QDialog):
         # same shape; a horizontal scrollbar under the list did not.
         self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._list.itemActivated.connect(lambda _: self._insert_selected())
-        layout.addWidget(self._list)
+
+        # An empty history used to be a single row card reading "Пока
+        # пусто", which looks like a transcript you cannot select rather
+        # than like an empty list. This sits in the middle of the space
+        # instead, where nothing pretends to be a row.
+        self._empty = QLabel(i18n.tr("history_empty"))
+        self._empty.setObjectName("Caption")
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._list)
+        self._stack.addWidget(_empty_state(self._empty, self._palette))
+        layout.addWidget(self._stack)
 
         hint = QLabel(i18n.tr("history_hint"))
         hint.setObjectName("Caption")
@@ -111,11 +142,8 @@ class HistoryWindow(QDialog):
         limit = self._controller.settings.recent_transcript_limit
         self._list.clear()
         entries = self._controller.history.entries(limit or None)
+        self._stack.setCurrentIndex(0 if entries else 1)
         if not entries:
-            item = QListWidgetItem()
-            item.setData(PRIMARY_ROLE, i18n.tr("history_empty"))
-            item.setFlags(Qt.ItemFlag.NoItemFlags)
-            self._list.addItem(item)
             return
         for index, entry in enumerate(entries):
             stamp = datetime.fromtimestamp(entry.created_at).strftime("%d.%m %H:%M")

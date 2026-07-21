@@ -238,7 +238,123 @@ def _restore_capitalization(text: str, targets: set[object]) -> str:
     return "".join(result)
 
 
-# -- 4. text style -------------------------------------------------------
+# -- 4. numbers as digits ------------------------------------------------
+#
+# Parakeet writes numbers out in words. "Позвони на двадцать три" is not
+# what anyone wants in a phone field, so spoken numerals are folded back
+# into digits. Only 0-999 is handled: past that, speech starts mixing in
+# units and cases ("тысяча двести", "две тысячи") that a table cannot
+# resolve, and a half-converted "2 тысячи 200" is worse than the words.
+
+_UNITS_RU = {
+    "ноль": 0, "нуль": 0,
+    "один": 1, "одна": 1, "одно": 1,
+    "два": 2, "две": 2,
+    "три": 3, "четыре": 4, "пять": 5, "шесть": 6,
+    "семь": 7, "восемь": 8, "девять": 9,
+}
+_TEENS_RU = {
+    "десять": 10, "одиннадцать": 11, "двенадцать": 12, "тринадцать": 13,
+    "четырнадцать": 14, "пятнадцать": 15, "шестнадцать": 16,
+    "семнадцать": 17, "восемнадцать": 18, "девятнадцать": 19,
+}
+_TENS_RU = {
+    "двадцать": 20, "тридцать": 30, "сорок": 40, "пятьдесят": 50,
+    "шестьдесят": 60, "семьдесят": 70, "восемьдесят": 80, "девяносто": 90,
+}
+_HUNDREDS_RU = {
+    "сто": 100, "двести": 200, "триста": 300, "четыреста": 400,
+    "пятьсот": 500, "шестьсот": 600, "семьсот": 700, "восемьсот": 800,
+    "девятьсот": 900,
+}
+
+_UNITS_EN = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
+    "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+}
+_TEENS_EN = {
+    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+    "nineteen": 19,
+}
+_TENS_EN = {
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+    "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+}
+
+_NUMBER_TOKEN = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def _numeral_value(word: str, language: str) -> tuple[Optional[int], str]:
+    """The value of one spoken numeral and which place it occupies."""
+    lowered = word.lower()
+    tables = ((_HUNDREDS_RU, "hundreds"), (_TENS_RU, "tens"),
+              (_TEENS_RU, "teens"), (_UNITS_RU, "units"))
+    if language == "en":
+        tables = ((_TENS_EN, "tens"), (_TEENS_EN, "teens"),
+                  (_UNITS_EN, "units"))
+    for table, place in tables:
+        if lowered in table:
+            return table[lowered], place
+    return None, ""
+
+
+_PLACE_ORDER = {"hundreds": 3, "tens": 2, "teens": 2, "units": 1}
+
+
+def numbers_as_digits(text: str, language: str = "ru") -> str:
+    """Fold spoken numerals into digits: "двадцать три" -> "23".
+
+    Words are only joined while each one names a smaller place than the
+    last, which is what keeps "два три" (two separate numbers, as in a
+    dictated code) from silently becoming "23", and stops "сто сто" from
+    becoming anything at all.
+    """
+    if not text:
+        return text
+    tokens = list(_NUMBER_TOKEN.finditer(text))
+    if not tokens:
+        return text
+
+    pieces: list[str] = []
+    cursor = 0
+    index = 0
+    while index < len(tokens):
+        value, place = _numeral_value(tokens[index].group(0), language)
+        if value is None:
+            index += 1
+            continue
+
+        total = value
+        last_place = _PLACE_ORDER[place]
+        end = index
+        # "теens" already spend the tens place, so nothing may follow them.
+        while place != "teens" and end + 1 < len(tokens):
+            # Only a plain space may join two numerals; a comma or a full
+            # stop between them means two numbers, not one.
+            gap = text[tokens[end].end():tokens[end + 1].start()]
+            if gap.strip():
+                break
+            next_value, next_place = _numeral_value(
+                tokens[end + 1].group(0), language)
+            if next_value is None or _PLACE_ORDER[next_place] >= last_place:
+                break
+            total += next_value
+            last_place = _PLACE_ORDER[next_place]
+            place = next_place
+            end += 1
+
+        start_offset = tokens[index].start()
+        pieces.append(text[cursor:start_offset])
+        pieces.append(str(total))
+        cursor = tokens[end].end()
+        index = end + 1
+
+    pieces.append(text[cursor:])
+    return "".join(pieces)
+
+
+# -- 5. text style -------------------------------------------------------
 
 
 # The whole run of marks is captured, so "..." and "?!" are recognised as
@@ -331,6 +447,7 @@ def process_transcript(
     language: str = "auto",
     corrections: Sequence[Correction] = (),
     strip_fillers: bool = False,
+    digits: bool = False,
     style: TextStyle = TextStyle.FORMAL,
 ) -> tuple[str, int, int]:
     """Returns (text, corrections applied, fillers removed)."""
@@ -339,6 +456,11 @@ def process_transcript(
     removed = 0
     if strip_fillers:
         text, removed = remove_filler_words(text)
+    if digits:
+        # After corrections, so a replacement rule can still spell a
+        # number out in words and have it converted like any other.
+        text = numbers_as_digits(
+            text, "en" if language.startswith("en") else "ru")
     # Style last: it works on the finished sentence, so filler removal
     # cannot re-expose a full stop that this pass already took off.
     text = apply_text_style(text.strip(), style)
