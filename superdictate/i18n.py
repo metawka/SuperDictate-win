@@ -12,7 +12,7 @@ _LANGUAGE = "ru"
 
 _STRINGS: dict[str, tuple[str, str]] = {
     # -- status ------------------------------------------------------
-    "app_name": ("SuperDictate", "SuperDictate"),
+    "app_name": ("D1CT", "D1CT"),
     "status_starting": ("Запуск…", "Starting…"),
     "status_downloading": ("Загрузка модели", "Downloading model"),
     "status_loading": ("Загрузка модели в память", "Loading model"),
@@ -36,7 +36,6 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "panel_model": ("Модель", "Model"),
     "panel_hotkey": ("Диктовка", "Dictation"),
     "panel_hotkey_history": ("История", "History"),
-    "panel_hotkey_alternate": ("Альтернативное завершение", "Alternate finish"),
     "panel_restart": ("Перезапустить", "Restart"),
     "panel_check_updates": ("Проверить обновления", "Check for updates"),
     "panel_compute": ("Вычисления", "Compute"),
@@ -62,7 +61,7 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "stats_activity": ("Активность", "Activity"),
 
     # -- settings ----------------------------------------------------
-    "settings_title": ("Настройки SuperDictate", "SuperDictate Settings"),
+    "settings_title": ("Настройки D1CT", "D1CT Settings"),
     "settings_tab_hotkeys": ("Сочетания", "Shortcuts"),
     "settings_tab_dictation": ("Диктовка", "Dictation"),
     "settings_tab_appearance": ("Вид", "Appearance"),
@@ -72,7 +71,6 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_section_recognition": ("Распознавание", "Recognition"),
     "settings_section_capture": ("Запись", "Capture"),
     "settings_primary_hotkey": ("Основное сочетание", "Primary shortcut"),
-    "settings_alternate_hotkey": ("Альтернативное завершение", "Alternate finish"),
     "settings_history_hotkey": ("Быстрая история", "Quick history"),
     "settings_record": ("Записать…", "Record…"),
     "settings_trigger_mode": ("Режим", "Mode"),
@@ -81,8 +79,16 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_completion": ("Повторное нажатие", "Second press"),
     "settings_completion_insert": ("Вставить текст", "Insert text"),
     "settings_completion_enter": ("Вставить текст и Enter", "Insert text and press Enter"),
-    "settings_alternate_enabled": ("Включить альтернативное сочетание",
-                                   "Enable alternate shortcut"),
+    "settings_text_style": ("Стиль текста", "Text style"),
+    "settings_text_style_formal": ("Формальный", "Formal"),
+    "settings_text_style_standard": ("Стандартный", "Standard"),
+    "settings_text_style_informal": ("Неформальный", "Informal"),
+    "settings_text_style_hint": (
+        "Формальный: как распознала модель. Стандартный: без точки в конце. "
+        "Неформальный: без точки и с маленькой буквы.",
+        "Formal: exactly as recognised. Standard: no full stop at the end. "
+        "Informal: no full stop and no leading capital.",
+    ),
     "settings_enter_delay": ("Задержка перед Enter, мс", "Delay before Enter, ms"),
     "settings_paste_suffix": ("После вставки", "After insertion"),
     "settings_suffix_space": ("Добавить пробел", "Append space"),
@@ -160,7 +166,7 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "corrections_remove": ("Удалить", "Remove"),
     "corrections_note": (
         "Замены применяются к тексту до вставки; регистр игнорируется, "
-        "совпадение — по целым словам.",
+        "совпадение по целым словам.",
         "Replacements are applied before insertion; matching is "
         "case-insensitive and whole-word.",
     ),
@@ -173,7 +179,7 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "history_delete": ("Удалить", "Delete"),
     "history_clear": ("Очистить всё", "Clear all"),
     "history_hint": (
-        "Enter — вставить в активное окно, Esc — закрыть.",
+        "Enter, вставить в активное окно. Esc, закрыть.",
         "Enter inserts into the active window, Esc closes.",
     ),
 

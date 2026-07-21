@@ -2,7 +2,7 @@
 
 Three pieces, all driven by :class:`~superdictate.history.UsageStats`:
 
-* metric tiles — today and all-time totals at a glance;
+* metric tiles, today and all-time totals at a glance;
 * a 14-day bar chart, so a change in habit is visible;
 * a contribution-style heatmap of the last 17 weeks.
 
@@ -239,7 +239,7 @@ class ActivityGrid(QWidget):
             if day <= date.today():
                 count = self._by_day.get(day.isoformat(), 0)
                 self.setToolTip(
-                    f"{day.strftime('%d.%m.%Y')} — "
+                    f"{day.strftime('%d.%m.%Y')}: "
                     f"{count} {i18n.tr('panel_dictations')}"
                 )
                 return

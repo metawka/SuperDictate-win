@@ -57,6 +57,8 @@ _PATHS: dict[str, str] = {
     "cpu": "M7 7h10v10H7zM4 10h3M4 14h3M17 10h3M17 14h3"
            "M10 4v3M14 4v3M10 17v3M14 17v3",
     "info": "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01",
+    "warning": "M12 3.5L2 20.5h20zM12 10v4.5M12 17.5h.01",
+    "error": "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9 9l6 6M15 9l-6 6",
     "words": "M4 6h16M4 12h16M4 18h10",
 }
 
@@ -101,7 +103,7 @@ def stylesheet_url(name: str, color: str, size: int = 14,
     """
     from .. import paths
 
-    cache = paths.BASE_DIR / "Cache"
+    cache = paths.CACHE_DIR
     cache.mkdir(parents=True, exist_ok=True)
     target = cache / f"{name}-{color.lstrip('#')}-{size}.png"
     if not target.exists():

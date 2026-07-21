@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Build SuperDictate into dist\SuperDictate\SuperDictate.exe.
+    Build D1CT into dist\D1CT\D1CT.exe.
 
 .DESCRIPTION
     Regenerates the icon, runs the self-tests (a failing port should never
@@ -41,13 +41,13 @@ if (-not $SkipTests) {
 }
 
 Write-Host "Packaging with PyInstaller..." -ForegroundColor Cyan
-& $python -m PyInstaller --noconfirm SuperDictate.spec
+& $python -m PyInstaller --noconfirm D1CT.spec
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed." }
 
-$exe = "dist\SuperDictate\SuperDictate.exe"
+$exe = "dist\D1CT\D1CT.exe"
 if (-not (Test-Path $exe)) { throw "Expected $exe, but it was not produced." }
 
-$size = [math]::Round((Get-ChildItem dist\SuperDictate -Recurse |
+$size = [math]::Round((Get-ChildItem dist\D1CT -Recurse |
                        Measure-Object -Property Length -Sum).Sum / 1MB, 1)
 Write-Host ""
 Write-Host "Built $exe ($size MB folder)" -ForegroundColor Green

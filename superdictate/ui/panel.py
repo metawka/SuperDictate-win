@@ -3,8 +3,8 @@
 macOS keeps this deliberately compact: service status, missing
 permissions, and an available update, with the gear opening settings in a
 separate window. The Windows panel keeps that shape and drops the
-permissions block — Windows has no per-app Accessibility or Input
-Monitoring gate to chase — replacing it with what actually varies here:
+permissions block, Windows has no per-app Accessibility or Input
+Monitoring gate to chase, replacing it with what actually varies here:
 which compute device the model ended up on, and which microphone is in
 use.
 
@@ -203,7 +203,7 @@ class ControlPanel(QMainWindow):
             glyph.setStyleSheet("background: transparent;")
             key = QLabel(i18n.tr(label_key))
             key.setObjectName("Key")
-            value = QLabel("—")
+            value = QLabel("-")
             value.setObjectName("Value")
             value.setAlignment(Qt.AlignmentFlag.AlignRight
                                | Qt.AlignmentFlag.AlignVCenter)
@@ -226,7 +226,6 @@ class ControlPanel(QMainWindow):
         self._shortcut_labels: dict[str, QLabel] = {}
         rows = (
             ("mic", "panel_hotkey", "hotkey"),
-            ("type", "panel_hotkey_alternate", "enter_hotkey"),
             ("history", "panel_hotkey_history", "history_hotkey"),
         )
         for row, (icon_name, label_key, attribute) in enumerate(rows):
@@ -235,7 +234,7 @@ class ControlPanel(QMainWindow):
             glyph.setStyleSheet("background: transparent;")
             key = QLabel(i18n.tr(label_key))
             key.setObjectName("Key")
-            value = QLabel("—")
+            value = QLabel("-")
             value.setObjectName("Shortcut")
             value.setAlignment(Qt.AlignmentFlag.AlignCenter)
             grid.addWidget(glyph, row, 0)
@@ -295,7 +294,7 @@ class ControlPanel(QMainWindow):
                 for provider in model.active_providers
             ))
         else:
-            self._compute_label.setText("—")
+            self._compute_label.setText("-")
         self._microphone_label.setText(
             settings.input_device or i18n.tr("settings_device_default"))
         self._stats.refresh()
@@ -346,7 +345,7 @@ class ControlPanel(QMainWindow):
             return
         if not info.has_windows_asset:
             self._update_label.setText(
-                f"{i18n.tr('update_available', version=info.version)} — "
+                f"{i18n.tr('update_available', version=info.version)}, "
                 f"{i18n.tr('update_no_windows_build')}"
             )
             return

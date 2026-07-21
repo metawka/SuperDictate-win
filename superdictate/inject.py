@@ -12,7 +12,7 @@ so the flow is simpler but needs three pieces of care the Mac does not:
    resource; another app can hold it open. Opening is retried, and the
    previous text is restored once the target app has had time to read.
 3. **Telling our own input apart.** Every synthetic event carries a magic
-   value in ``dwExtraInfo`` so the keyboard hook can ignore it — otherwise
+   value in ``dwExtraInfo`` so the keyboard hook can ignore it, otherwise
    the paste's own Ctrl would re-enter the hotkey state machine.
 
 ``KEYEVENTF_UNICODE`` typing is kept as a fallback for apps that refuse a
@@ -70,7 +70,7 @@ class KEYBDINPUT(ctypes.Structure):
         ("wScan", wt.WORD),
         ("dwFlags", wt.DWORD),
         ("time", wt.DWORD),
-        # ULONG_PTR — a plain integer, not a pointer. It carries
+        # ULONG_PTR, a plain integer, not a pointer. It carries
         # INJECTED_MARKER by value, which is what the hook compares against.
         ("dwExtraInfo", ctypes.c_size_t),
     ]
@@ -93,7 +93,7 @@ user32.MapVirtualKeyW.argtypes = [wt.UINT, wt.UINT]
 user32.MapVirtualKeyW.restype = wt.UINT
 
 # Handles and pointers must be declared, or ctypes defaults to c_int and
-# truncates them to 32 bits on a 64-bit build — GlobalLock would then hand
+# truncates them to 32 bits on a 64-bit build, GlobalLock would then hand
 # back a garbage address and the memmove below would fault.
 user32.OpenClipboard.argtypes = [wt.HWND]
 user32.OpenClipboard.restype = wt.BOOL
@@ -274,7 +274,7 @@ def paste_text(
 
 def _press_enter(delay_ms: int) -> None:
     # Some apps (Electron, VMs, remote sessions) need a beat to process the
-    # paste before they can handle a keystroke — same reason macOS made
+    # paste before they can handle a keystroke, same reason macOS made
     # this delay configurable.
     time.sleep(max(0, min(500, delay_ms)) / 1000.0)
     _send([_make_input(VK_RETURN), _make_input(VK_RETURN, key_up=True)])

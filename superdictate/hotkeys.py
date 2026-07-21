@@ -102,7 +102,6 @@ class HotkeyChoice:
 
 
 DEFAULT_HOTKEY = HotkeyChoice(VK_RCONTROL)
-DEFAULT_ENTER_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_ALT)
 DEFAULT_HISTORY_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_SHIFT)
 
 
@@ -114,7 +113,6 @@ class TriggerMode(str, Enum):
 class Action(str, Enum):
     PRESS = "press"
     RELEASE = "release"
-    RELEASE_ALTERNATE = "release_alternate"
     CANCEL = "cancel"
     SHOW_HISTORY = "show_history"
     REJECTED_BUSY_PRESS = "rejected_busy_press"
@@ -156,7 +154,7 @@ class _Consumed:
     early build swallow every Shift press: the history chord requires
     Shift, so Shift "belonged" to a shortcut and was suppressed even when
     the chord never completed. A modifier must always reach the
-    foreground app — only the chord's primary key is ever eaten.
+    foreground app, only the chord's primary key is ever eaten.
     """
 
     edge: _Edge
@@ -247,39 +245,20 @@ class _ShortcutState:
         return _CONSUMED_PASS
 
 
-def _is_modifier_prefix(prefix: HotkeyChoice, shortcut: HotkeyChoice) -> bool:
-    """True when `prefix` fires as an unavoidable side effect of `shortcut`.
-
-    Only bare modifiers can be prefixes, and only of a shortcut that
-    *requires* that modifier. If dictation is on bare Right Alt and the
-    alternate finish is "Alt + Right Ctrl", reaching the chord means
-    holding Alt, which would start a dictation first — so the alternate
-    shortcut is skipped. "Right Ctrl" versus "Alt + Right Ctrl" is not a
-    prefix relationship: Ctrl is the chord's primary key, not one of its
-    required modifiers, and the state machine tells the two apart.
-    """
-    if not prefix.is_modifier or prefix.modifiers != 0:
-        return False
-    flag = prefix.modifier_flag
-    return bool(flag and (shortcut.modifiers & flag))
-
-
 class HotkeyStateMachine:
     """Port of ``HotkeyTransitionState``.
 
-    Pure logic, no Windows API — the self-tests drive it directly.
+    Pure logic, no Windows API, the self-tests drive it directly.
     """
 
     def __init__(self) -> None:
         self._standard = _ShortcutState()
-        self._enter = _ShortcutState()
         self._history = _ShortcutState()
         self._toggle_active = False
         self._suppress_escape_up = False
 
     def reset_all(self) -> None:
         self._standard.reset()
-        self._enter.reset()
         self._history.reset()
         self._toggle_active = False
         self._suppress_escape_up = False
@@ -292,8 +271,6 @@ class HotkeyStateMachine:
         event: _Event,
         *,
         hotkey: HotkeyChoice,
-        enter_hotkey: HotkeyChoice,
-        alternate_completion_enabled: bool,
         history_hotkey: HotkeyChoice,
         trigger_mode: TriggerMode,
         is_recording: bool,
@@ -305,11 +282,6 @@ class HotkeyStateMachine:
         history = self._transition_history(event, is_recording, history_hotkey)
         if history is not None:
             return history
-
-        if alternate_completion_enabled and not _is_modifier_prefix(hotkey, enter_hotkey):
-            completion = self._transition_enter(event, is_recording, enter_hotkey)
-            if completion is not None:
-                return completion
 
         consumed = self._standard.consume(event, hotkey)
         if consumed.edge == _Edge.PASS:
@@ -343,28 +315,13 @@ class HotkeyStateMachine:
         consumed = self._history.consume(event, history_hotkey)
         if consumed.edge == _Edge.PRESS:
             self._standard.reset()
-            self._enter.reset()
             if not is_recording:
                 self._toggle_active = False
             return _Result(consumed.suppress, [Action.SHOW_HISTORY])
         if consumed.edge in (_Edge.RELEASE, _Edge.SUPPRESS) and consumed.suppress:
             return _suppress_only()
-        # Anything not actually eaten — a bare modifier, above all — must
+        # Anything not actually eaten (a bare modifier, above all) must
         # fall through to the other shortcuts and then to the app.
-        return None
-
-    def _transition_enter(
-        self, event: _Event, is_recording: bool, enter_hotkey: HotkeyChoice
-    ) -> Optional[_Result]:
-        if not is_recording and not self._enter.is_engaged:
-            return None
-        consumed = self._enter.consume(event, enter_hotkey)
-        if consumed.edge == _Edge.PRESS and is_recording:
-            self._standard.reset()
-            self._toggle_active = False
-            return _Result(consumed.suppress, [Action.RELEASE_ALTERNATE])
-        if consumed.edge != _Edge.PASS and consumed.suppress:
-            return _suppress_only()
         return None
 
     def _transition_escape(self, event: _Event, is_recording: bool) -> _Result:
@@ -387,7 +344,7 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
         ("scanCode", wt.DWORD),
         ("flags", wt.DWORD),
         ("time", wt.DWORD),
-        # ULONG_PTR, carried by value — see INJECTED_MARKER below.
+        # ULONG_PTR, carried by value, see INJECTED_MARKER below.
         ("dwExtraInfo", ctypes.c_size_t),
     ]
 
@@ -430,9 +387,7 @@ class HotkeyListener:
 
         # Live configuration, updated from the Qt thread.
         self.hotkey = DEFAULT_HOTKEY
-        self.enter_hotkey = DEFAULT_ENTER_HOTKEY
         self.history_hotkey = DEFAULT_HISTORY_HOTKEY
-        self.alternate_completion_enabled = True
         self.trigger_mode = TriggerMode.TOGGLE
         self.is_recording_active: Callable[[], bool] = lambda: False
         self.can_start_recording: Callable[[], bool] = lambda: True
@@ -535,8 +490,6 @@ class HotkeyListener:
                 result = self._machine.transition(
                     event,
                     hotkey=self.hotkey,
-                    enter_hotkey=self.enter_hotkey,
-                    alternate_completion_enabled=self.alternate_completion_enabled,
                     history_hotkey=self.history_hotkey,
                     trigger_mode=self.trigger_mode,
                     is_recording=self.is_recording_active(),

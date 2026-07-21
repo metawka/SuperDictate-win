@@ -1,4 +1,4 @@
-"""SuperDictate for Windows — local push-to-talk dictation.
+"""D1CT for Windows, local push-to-talk dictation.
 
 A Windows port of https://github.com/shlgd/SuperDictate (macOS, Swift),
 which is itself based on Parakey by Richard Courtman. Same speech model

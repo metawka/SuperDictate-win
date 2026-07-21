@@ -1,8 +1,8 @@
-"""Render the tray microphone into assets/SuperDictate.ico.
+"""Pack assets/D1CT.png into assets/D1CT.ico.
 
-The tray glyph is drawn at runtime so it can recolour per state; the
-executable needs a static file, so this renders the same path at the
-sizes Windows asks for and packs them into a PNG-compressed ICO.
+Windows wants a multi-size .ico for the executable, the installer and the
+Explorer entry. The artwork is a single 500x500 PNG, so this only rescales
+it; the tray builds its own QIcon from the same file at runtime.
 
 Run from the repository root::
 
@@ -18,24 +18,24 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from PySide6.QtCore import QBuffer, QByteArray  # noqa: E402
-from PySide6.QtGui import QGuiApplication  # noqa: E402
+from PySide6.QtCore import QBuffer, QByteArray, Qt  # noqa: E402
+from PySide6.QtGui import QGuiApplication, QPixmap  # noqa: E402
 
 SIZES = (16, 24, 32, 48, 64, 128, 256)
-# Shell icons sit on unpredictable backgrounds; the light glyph reads on
-# both the dark taskbar and a light Explorer window.
-COLOR = "#f2f2f7"
+SOURCE = ROOT / "assets" / "D1CT.png"
 
 
-def png_bytes(size: int) -> bytes:
-    from superdictate.ui.tray import build_icon
-
-    pixmap = build_icon(COLOR, size).pixmap(size, size)
+def png_bytes(source: QPixmap, size: int) -> bytes:
+    scaled = source.scaled(
+        size, size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
     # The QByteArray must outlive the QBuffer that writes into it.
     storage = QByteArray()
     buffer = QBuffer(storage)
     buffer.open(QBuffer.OpenModeFlag.WriteOnly)
-    pixmap.save(buffer, "PNG")
+    scaled.save(buffer, "PNG")
     buffer.close()
     return bytes(storage)
 
@@ -57,9 +57,13 @@ def build_ico(images: list[tuple[int, bytes]]) -> bytes:
 
 
 def main() -> int:
-    app = QGuiApplication(sys.argv)  # noqa: F841 — needed for QPixmap
-    images = [(size, png_bytes(size)) for size in SIZES]
-    target = ROOT / "assets" / "SuperDictate.ico"
+    app = QGuiApplication(sys.argv)  # noqa: F841 - needed for QPixmap
+    source = QPixmap(str(SOURCE))
+    if source.isNull():
+        print(f"missing or unreadable artwork: {SOURCE}", file=sys.stderr)
+        return 1
+    images = [(size, png_bytes(source, size)) for size in SIZES]
+    target = ROOT / "assets" / "D1CT.ico"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(build_ico(images))
     print(f"wrote {target} ({target.stat().st_size} bytes, {len(images)} sizes)")

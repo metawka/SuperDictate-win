@@ -1,7 +1,7 @@
 """Built-in checks, the counterpart of ``Parakey --self-test all``.
 
 Everything here is pure logic: no microphone, no keyboard hook, no model,
-no Qt. That is deliberate — these are the parts a port is most likely to
+no Qt. That is deliberate, these are the parts a port is most likely to
 get subtly wrong, and they are the parts that can be verified on a
 headless runner.
 """
@@ -18,18 +18,17 @@ from .hotkeys import (
     VK_ESCAPE,
     VK_LCONTROL,
     VK_RCONTROL,
-    VK_RMENU,
     VK_RSHIFT,
     Action,
     HotkeyChoice,
     HotkeyStateMachine,
     TriggerMode,
     _Event,
-    _is_modifier_prefix,
 )
-from .settings import Correction
+from .settings import Correction, TextStyle
 from .textproc import (
     apply_corrections,
+    apply_text_style,
     process_transcript,
     remove_filler_words,
     repair_model_text,
@@ -46,7 +45,6 @@ def _check(name: str, actual, expected) -> None:
 # -- hotkey state machine -------------------------------------------------
 
 HOTKEY = HotkeyChoice(VK_RCONTROL)
-ENTER_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_ALT)
 HISTORY_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_SHIFT)
 
 
@@ -59,8 +57,6 @@ def _feed(machine, vk, down, modifiers, *, mode=TriggerMode.TOGGLE,
     return machine.transition(
         _Event(vk=vk, is_down=down, modifiers=modifiers, is_repeat=repeat),
         hotkey=HOTKEY,
-        enter_hotkey=ENTER_HOTKEY,
-        alternate_completion_enabled=True,
         history_hotkey=HISTORY_HOTKEY,
         trigger_mode=mode,
         is_recording=recording,
@@ -104,18 +100,6 @@ def test_left_control_does_not_trigger() -> None:
     _check("left control passes through", (result.suppress, result.actions), (False, []))
 
 
-def test_alternate_finish_needs_recording() -> None:
-    machine = _machine()
-    idle = _feed(machine, VK_RMENU, True, MOD_ALT)
-    _check("alternate: ignored while idle", idle.actions, [])
-
-    machine = _machine()
-    _feed(machine, VK_RMENU, True, MOD_ALT, recording=True)
-    result = _feed(machine, VK_RCONTROL, True, MOD_ALT | MOD_CTRL, recording=True)
-    _check("alternate: chord finishes recording", result.actions,
-           [Action.RELEASE_ALTERNATE])
-
-
 def test_history_chord() -> None:
     machine = _machine()
     _feed(machine, VK_RSHIFT, True, MOD_SHIFT)
@@ -136,7 +120,7 @@ def test_escape_cancels_only_while_recording() -> None:
 def test_modifiers_are_never_swallowed() -> None:
     """Regression: the history chord must not cost the user the Shift key.
 
-    History is "Shift + Right Ctrl", so Shift belongs to a shortcut — but
+    History is "Shift + Right Ctrl", so Shift belongs to a shortcut, but
     suppressing it would break capital letters and Shift-click everywhere
     until the app quits. Only the chord's primary key may be eaten.
     """
@@ -160,20 +144,6 @@ def test_modifiers_are_never_swallowed() -> None:
     _check("chord opens history", chord.actions, [Action.SHOW_HISTORY])
     release = _feed(machine, VK_RSHIFT, False, 0)
     _check("shift release still reaches the app", release.suppress, False)
-
-
-def test_modifier_prefix_detection() -> None:
-    from .hotkeys import VK_LMENU
-
-    # The default pair is not a prefix relationship: Ctrl is the chord's
-    # primary key, not one of its required modifiers.
-    _check("prefix: default shortcuts coexist",
-           _is_modifier_prefix(HOTKEY, ENTER_HOTKEY), False)
-    # But a bare Alt hotkey would fire on the way into "Alt + Right Ctrl".
-    _check("prefix: bare Alt shadows an Alt chord",
-           _is_modifier_prefix(HotkeyChoice(VK_LMENU), ENTER_HOTKEY), True)
-    _check("prefix: a chord is never a prefix",
-           _is_modifier_prefix(HotkeyChoice(VK_RMENU, MOD_SHIFT), ENTER_HOTKEY), False)
 
 
 # -- transcript processing ------------------------------------------------
@@ -207,6 +177,27 @@ def test_filler_removal() -> None:
 
     text, _ = remove_filler_words("uh-huh, sure")
     _check("fillers: hyphenated interjections survive", text, "uh-huh, sure")
+
+
+def test_text_style() -> None:
+    _check("style: formal keeps everything",
+           apply_text_style("Привет, мир.", TextStyle.FORMAL), "Привет, мир.")
+    _check("style: standard drops the final stop",
+           apply_text_style("Привет, мир.", TextStyle.STANDARD), "Привет, мир")
+    _check("style: informal also lowercases",
+           apply_text_style("Привет, мир.", TextStyle.INFORMAL), "привет, мир")
+
+    # A question or an exclamation carries meaning a full stop does not,
+    # so only the full stop is dropped.
+    _check("style: question mark survives",
+           apply_text_style("Как дела?", TextStyle.STANDARD), "Как дела?")
+    _check("style: ellipsis survives",
+           apply_text_style("Ну...", TextStyle.STANDARD), "Ну...")
+    # An acronym would lose its meaning in lower case.
+    _check("style: acronyms keep their case",
+           apply_text_style("HTTP работает.", TextStyle.INFORMAL), "HTTP работает")
+    _check("style: empty text is safe",
+           apply_text_style("", TextStyle.INFORMAL), "")
 
 
 def test_pipeline_order() -> None:
@@ -265,14 +256,13 @@ _TESTS = [
     test_toggle_does_not_flip_when_busy,
     test_hold_press_and_release,
     test_left_control_does_not_trigger,
-    test_alternate_finish_needs_recording,
     test_history_chord,
     test_escape_cancels_only_while_recording,
     test_modifiers_are_never_swallowed,
-    test_modifier_prefix_detection,
     test_unk_repair,
     test_corrections,
     test_filler_removal,
+    test_text_style,
     test_pipeline_order,
     test_settings_round_trip,
     test_hotkey_json_guards,
@@ -290,9 +280,9 @@ def run_all() -> bool:
             _failures.append(f"{test.__name__} raised {type(exc).__name__}: {exc}")
 
     if _failures:
-        print(f"FAILED — {len(_failures)} problem(s) in {len(_TESTS)} tests\n")
+        print(f"FAILED: {len(_failures)} problem(s) in {len(_TESTS)} tests\n")
         for failure in _failures:
             print(f"  * {failure}")
         return False
-    print(f"OK — {len(_TESTS)} self-tests passed")
+    print(f"OK: {len(_TESTS)} self-tests passed")
     return True

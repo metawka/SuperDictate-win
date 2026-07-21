@@ -1,8 +1,8 @@
 """Application orchestration: the dictation state machine.
 
-Everything the macOS ``AppDelegate`` coordinates lives here — the hotkey
+Everything the macOS ``AppDelegate`` coordinates lives here, the hotkey
 listener, the recorder, the transcription worker, the HUD, the tray and
-the windows — with one structural difference. macOS splits the product
+the windows, with one structural difference. macOS splits the product
 into a background LaunchAgent plus a separate control panel process that
 talk through a status file. On Windows a single process owns the keyboard
 hook and the UI, and closing the control panel just hides a window; the
@@ -11,9 +11,9 @@ file so a second launch surfaces the running instance.
 
 Thread layout:
 
-* **Hook thread** — decodes hotkeys, never blocks (see :mod:`hotkeys`).
-* **Qt thread** — all UI, plus recorder start/stop.
-* **Model thread** — one worker draining a queue, so a second dictation
+* **Hook thread**, decodes hotkeys, never blocks (see :mod:`hotkeys`).
+* **Qt thread**, all UI, plus recorder start/stop.
+* **Model thread**, one worker draining a queue, so a second dictation
   started while the first is still transcribing simply queues up.
 """
 
@@ -202,10 +202,7 @@ class DictationController(QObject):
 
     def _apply_hotkey_settings(self) -> None:
         self.listener.hotkey = self.settings.hotkey
-        self.listener.enter_hotkey = self.settings.enter_hotkey
         self.listener.history_hotkey = self.settings.history_hotkey
-        self.listener.alternate_completion_enabled = \
-            self.settings.alternate_completion_enabled
         self.listener.trigger_mode = self.settings.trigger_mode
         self.listener.reset_state()
 
@@ -229,13 +226,6 @@ class DictationController(QObject):
                 self.begin_recording()
             elif action is Action.RELEASE:
                 self.finish_recording(self.settings.primary_completion_behavior)
-            elif action is Action.RELEASE_ALTERNATE:
-                # The alternate shortcut deliberately does the opposite of
-                # the primary one: if the primary presses Enter, this one
-                # does not, and vice versa.
-                self.finish_recording(
-                    self.settings.primary_completion_behavior.opposite
-                )
             elif action is Action.CANCEL:
                 self.cancel_recording()
             elif action is Action.SHOW_HISTORY:
@@ -336,6 +326,7 @@ class DictationController(QObject):
             language=self.settings.dictation_language,
             corrections=self.corrections.all(),
             strip_fillers=self.settings.remove_filler_words,
+            style=self.settings.text_style,
         )
         log.info(
             "Transcribed %.1fs of audio in %.2fs (RTF %.2f, %d corrections, "

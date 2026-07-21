@@ -1,16 +1,16 @@
 # Происхождение / Attribution
 
-Это порт для Windows. Он не содержит кода macOS-версии — весь код написан
-заново на Python + PySide6, — но повторяет её поведение, названия настроек
+Это порт для Windows. Он не содержит кода macOS-версии (весь код написан
+заново на Python + PySide6), но повторяет её поведение, названия настроек
 и структуру данных, поэтому цепочка авторства сохраняется целиком.
 
 | Проект | Автор | Роль |
 | --- | --- | --- |
 | [Parakey](https://github.com/rcourtman/Parakey) | Richard Courtman | оригинал (macOS, Swift) |
 | [SuperDictate](https://github.com/shlgd/SuperDictate) | shlgd | форк Parakey, от которого взято поведение |
-| SuperDictate for Windows | metawka | этот порт (Python, PySide6) |
+| D1CT for Windows | metawka | этот порт (Python, PySide6) |
 
-Все три распространяются по лицензии MIT — см. [LICENSE](LICENSE).
+Все три распространяются по лицензии MIT, см. [LICENSE](LICENSE).
 
 ## Сторонние компоненты
 
@@ -24,5 +24,5 @@
 | [pycaw](https://github.com/AndreMiras/pycaw) | MIT | приглушение системного звука |
 
 Веса модели не входят в состав установщика: они скачиваются при первом
-запуске в `%LOCALAPPDATA%\SuperDictate\Models` и остаются под лицензией
+запуске в `%LOCALAPPDATA%\D1CT\Models` и остаются под лицензией
 CC-BY-4.0 NVIDIA.

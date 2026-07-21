@@ -1,7 +1,7 @@
 """The settings window.
 
 macOS puts the shortcuts, completion behaviour, capsule size, colours and
-background behind the gear button, and — importantly — keeps every change
+background behind the gear button, and (importantly) keeps every change
 as a *draft* until "Save and restart" applies them together. That draft
 model is preserved here: widgets mutate a local dict, and only Save writes
 it back to :class:`~superdictate.settings.Settings` and asks the
@@ -53,6 +53,7 @@ from ..settings import (
     HUDSize,
     PasteSuffix,
     Settings,
+    TextStyle,
 )
 from . import icons
 from .recorder import ShortcutRecorderDialog
@@ -174,17 +175,8 @@ class SettingsWindow(QDialog):
         keys = Section(i18n.tr("settings_tab_hotkeys"))
         self._hotkey_button = self._shortcut_row(
             keys, "settings_primary_hotkey", "hotkey")
-        self._enter_hotkey_button = self._shortcut_row(
-            keys, "settings_alternate_hotkey", "enter_hotkey")
         self._history_hotkey_button = self._shortcut_row(
             keys, "settings_history_hotkey", "history_hotkey")
-
-        self._alternate_enabled = QCheckBox(i18n.tr("settings_alternate_enabled"))
-        self._alternate_enabled.setChecked(
-            bool(self._draft["alternate_completion_enabled"]))
-        self._alternate_enabled.toggled.connect(
-            lambda value: self._draft.update(alternate_completion_enabled=value))
-        keys.add_row(None, self._alternate_enabled)
 
         behaviour = Section(i18n.tr("settings_section_behaviour"))
         self._trigger = self._combo(
@@ -201,7 +193,8 @@ class SettingsWindow(QDialog):
         self._enter_delay = QSpinBox()
         self._enter_delay.setRange(0, 500)
         self._enter_delay.setSingleStep(10)
-        self._enter_delay.setSuffix(" ms")
+        # No suffix: the row label already carries the unit, and a hard-coded
+        # English one sat badly next to a Russian label.
         self._enter_delay.setValue(int(self._draft["enter_delay_milliseconds"]))
         self._enter_delay.valueChanged.connect(
             lambda value: self._draft.update(enter_delay_milliseconds=value))
@@ -220,6 +213,13 @@ class SettingsWindow(QDialog):
              (PasteSuffix.NONE.value, i18n.tr("settings_suffix_none")),
              (PasteSuffix.NEWLINE.value, i18n.tr("settings_suffix_newline"))],
         )
+        self._text_style = self._combo(
+            recognition, "settings_text_style", "text_style",
+            [(TextStyle.FORMAL.value, i18n.tr("settings_text_style_formal")),
+             (TextStyle.STANDARD.value, i18n.tr("settings_text_style_standard")),
+             (TextStyle.INFORMAL.value, i18n.tr("settings_text_style_informal"))],
+        )
+        recognition.add_caption(i18n.tr("settings_text_style_hint"))
         self._fillers = self._checkbox(
             recognition, "settings_remove_fillers", "remove_filler_words")
 
@@ -235,7 +235,6 @@ class SettingsWindow(QDialog):
         self._silence_seconds.setRange(1.0, 10.0)
         self._silence_seconds.setSingleStep(0.5)
         self._silence_seconds.setDecimals(1)
-        self._silence_seconds.setSuffix(" s")
         self._silence_seconds.setValue(float(self._draft.get("silence_stop_seconds", 2.5)))
         self._silence_seconds.valueChanged.connect(
             lambda value: self._draft.update(silence_stop_seconds=value))
@@ -340,7 +339,7 @@ class SettingsWindow(QDialog):
         compute_options.append(("cpu", i18n.tr("settings_compute_cpu")))
         self._compute = self._combo(engine, "settings_compute", "compute_provider",
                                     compute_options)
-        engine.add_row("ONNX Runtime", self._muted_label(", ".join(providers) or "—"))
+        engine.add_row("ONNX Runtime", self._muted_label(", ".join(providers) or "-"))
         return _page(system, engine)
 
     # -- widget helpers -----------------------------------------------

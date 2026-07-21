@@ -18,7 +18,6 @@ from typing import Any, Optional
 
 from . import paths
 from .hotkeys import (
-    DEFAULT_ENTER_HOTKEY,
     DEFAULT_HISTORY_HOTKEY,
     DEFAULT_HOTKEY,
     HotkeyChoice,
@@ -34,13 +33,17 @@ class CompletionBehavior(str, Enum):
     def presses_enter(self) -> bool:
         return self is CompletionBehavior.INSERT_AND_ENTER
 
-    @property
-    def opposite(self) -> "CompletionBehavior":
-        return (
-            CompletionBehavior.INSERT_AND_ENTER
-            if self is CompletionBehavior.INSERT
-            else CompletionBehavior.INSERT
-        )
+
+class TextStyle(str, Enum):
+    """How much punctuation the inserted text keeps.
+
+    The model always returns a fully punctuated sentence. Chat and code
+    comments rarely want that, so two looser styles trim it back.
+    """
+
+    FORMAL = "formal"          # exactly what the model produced
+    STANDARD = "standard"      # no full stop at the end
+    INFORMAL = "informal"      # no full stop, and no leading capital
 
 
 class PasteSuffix(str, Enum):
@@ -137,10 +140,9 @@ class Correction:
 
 _DEFAULTS: dict[str, Any] = {
     "hotkey": DEFAULT_HOTKEY.to_json(),
-    "enter_hotkey": DEFAULT_ENTER_HOTKEY.to_json(),
     "history_hotkey": DEFAULT_HISTORY_HOTKEY.to_json(),
     "primary_completion_behavior": CompletionBehavior.INSERT.value,
-    "alternate_completion_enabled": True,
+    "text_style": TextStyle.FORMAL.value,
     "interface_language": "ru",
     "trigger_mode": TriggerMode.TOGGLE.value,
     "paste_suffix": PasteSuffix.SPACE.value,
@@ -219,7 +221,7 @@ class Settings:
             return dict(self._data)
 
     def apply(self, changes: dict[str, Any]) -> None:
-        """Apply a whole draft at once — the macOS `Save and restart` flow."""
+        """Apply a whole draft at once, the macOS `Save and restart` flow."""
         with self._lock:
             for key, value in changes.items():
                 if key in _DEFAULTS:
@@ -233,10 +235,6 @@ class Settings:
         return HotkeyChoice.from_json(self._get("hotkey"), DEFAULT_HOTKEY)
 
     @property
-    def enter_hotkey(self) -> HotkeyChoice:
-        return HotkeyChoice.from_json(self._get("enter_hotkey"), DEFAULT_ENTER_HOTKEY)
-
-    @property
     def history_hotkey(self) -> HotkeyChoice:
         return HotkeyChoice.from_json(self._get("history_hotkey"), DEFAULT_HISTORY_HOTKEY)
 
@@ -246,8 +244,8 @@ class Settings:
                         CompletionBehavior.INSERT)
 
     @property
-    def alternate_completion_enabled(self) -> bool:
-        return bool(self._get("alternate_completion_enabled"))
+    def text_style(self) -> TextStyle:
+        return _enum_or(TextStyle, self._get("text_style"), TextStyle.FORMAL)
 
     @property
     def interface_language(self) -> str:

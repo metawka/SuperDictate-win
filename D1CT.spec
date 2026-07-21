@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller build for SuperDictate.
+"""PyInstaller build for D1CT.
 
 One-folder rather than one-file: onnxruntime ships large native DLLs, and
 a one-file build would unpack ~200 MB to a temporary directory on every
@@ -8,7 +8,7 @@ tray from login.
 
 The speech model is NOT bundled. It is ~640 MB, it is licensed
 separately, and the app already downloads it on first run with a progress
-bar into %LOCALAPPDATA%\\SuperDictate\\Models.
+bar into %LOCALAPPDATA%\\D1CT\\Models.
 """
 
 from PyInstaller.utils.hooks import (
@@ -23,6 +23,10 @@ datas = collect_data_files("onnx_asr")
 # shipped alongside the code.
 datas += copy_metadata("onnx-asr")
 datas += copy_metadata("onnxruntime")
+# The tray icon is drawn from the product mark at runtime, so the PNG has
+# to travel with the build; the .ico only covers the window/taskbar icon
+# that Windows reads from the executable itself.
+datas += [("assets/D1CT.png", "assets")]
 binaries = collect_dynamic_libs("onnxruntime")
 
 hiddenimports = [
@@ -59,14 +63,14 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="SuperDictate",
+    name="D1CT",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     console=False,          # tray app: a console window would flash on login
     disable_windowed_traceback=False,
-    icon="assets/SuperDictate.ico",
+    icon="assets/D1CT.ico",
 )
 
 coll = COLLECT(
@@ -75,5 +79,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="SuperDictate",
+    name="D1CT",
 )

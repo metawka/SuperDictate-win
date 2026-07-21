@@ -40,7 +40,7 @@ def main(argv: list[str]) -> int:
 
     paths.ensure_directories()
     log = configure(verbose="--verbose" in argv)
-    log.info("SuperDictate %s starting", VERSION)
+    log.info("D1CT %s starting", VERSION)
 
     instance = SingleInstance()
     if instance.already_running:
@@ -49,8 +49,9 @@ def main(argv: list[str]) -> int:
         return 0
 
     app = QApplication(argv)
-    app.setApplicationName("SuperDictate")
-    app.setApplicationDisplayName("SuperDictate")
+    app.setApplicationName("D1CT")
+    # No display name: Qt would append " - D1CT" to every window title, and
+    # the control panel already says "D1CT 1.5.0".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -76,10 +77,9 @@ def main(argv: list[str]) -> int:
     tray.show()
 
     controller.history_toggle_requested.connect(windows.toggle_history)
-    controller.error_raised.connect(
-        lambda message: tray.showMessage(i18n.tr("app_name"), message,
-                                         QSystemTrayIcon.MessageIcon.Warning, 4000)
-    )
+    # On-screen rather than through the Windows notification centre: a
+    # banner that Focus Assist defers is a banner the user never sees.
+    controller.error_raised.connect(windows.show_warning)
     controller.transcript_ready.connect(lambda _: windows.refresh_history())
     controller.state_changed.connect(windows.on_state_changed)
     controller.level_changed.connect(windows.on_level)
@@ -102,6 +102,22 @@ class _Windows:
         self._settings_window = None
         self._history = None
         self._hud = None
+        self._toasts = None
+
+    # -- notifications --------------------------------------------------
+
+    @property
+    def toasts(self):
+        if self._toasts is None:
+            from superdictate.ui.toast import ToastManager
+
+            self._toasts = ToastManager()
+        return self._toasts
+
+    def show_warning(self, message: str) -> None:
+        from superdictate.ui.toast import Level
+
+        self.toasts.show(message, Level.WARNING)
 
     # -- panel / settings / history ------------------------------------
 

@@ -4,7 +4,7 @@ macOS downloads the release ZIP, verifies its SHA-256, bundle ID, version
 and signature, then replaces itself. That whole pipeline is built around
 codesign and the ``.app`` layout, neither of which exists here, so the
 Windows port stops one step earlier: it reports what is published and
-opens the release page. Nothing is downloaded or executed automatically —
+opens the release page. Nothing is downloaded or executed automatically;
 the macOS build also never installs without an explicit click.
 
 If the upstream release carries no Windows asset the check says so
@@ -26,12 +26,15 @@ from .version import VERSION
 
 log = get_logger("updater")
 
-LATEST_RELEASE_URL = "https://api.github.com/repos/shlgd/SuperDictate/releases/latest"
-RELEASES_PAGE = "https://github.com/shlgd/SuperDictate/releases/latest"
+LATEST_RELEASE_URL = "https://api.github.com/repos/metawka/SuperDictate-win/releases/latest"
+RELEASES_PAGE = "https://github.com/metawka/SuperDictate-win/releases/latest"
 CHECK_INTERVAL_SECONDS = 6 * 3600
 REQUEST_TIMEOUT = 15
 
-_WINDOWS_ASSET = re.compile(r"(win|windows)", re.IGNORECASE)
+# The releases this checks are Windows-only, so any installer or archive
+# is the right asset; requiring "win" in the name would reject
+# "D1CT-1.5.0-setup.exe".
+_WINDOWS_ASSET = re.compile(r"\.(exe|msi|zip)$", re.IGNORECASE)
 
 
 @dataclass
@@ -63,7 +66,7 @@ def check_latest(timeout: int = REQUEST_TIMEOUT) -> Optional[UpdateInfo]:
         LATEST_RELEASE_URL,
         headers={
             "Accept": "application/vnd.github+json",
-            "User-Agent": f"SuperDictate-Windows/{VERSION}",
+            "User-Agent": f"D1CT-Windows/{VERSION}",
         },
     )
     try:
@@ -80,7 +83,7 @@ def check_latest(timeout: int = REQUEST_TIMEOUT) -> Optional[UpdateInfo]:
     windows_asset = None
     for asset in payload.get("assets", []) or []:
         name = str(asset.get("name", ""))
-        if _WINDOWS_ASSET.search(name) and name.lower().endswith((".zip", ".exe", ".msi")):
+        if _WINDOWS_ASSET.search(name):
             windows_asset = str(asset.get("browser_download_url", "")) or None
             break
 

@@ -1,5 +1,5 @@
-"""Small Windows integrations: output muting, feedback sounds, autostart,
-caret location, and single-instance enforcement.
+"""Small Windows integrations: output muting, feedback sounds, autostart
+and single-instance enforcement.
 
 Each of these replaces a macOS-specific mechanism:
 
@@ -9,7 +9,6 @@ macOS                        Windows
 CoreAudio default device     ``IAudioEndpointVolume`` via pycaw
 ``NSSound`` system sounds    ``winsound`` system events
 ``~/Library/LaunchAgents``   ``HKCU\\...\\CurrentVersion\\Run``
-Accessibility caret bounds   ``GetGUIThreadInfo`` caret rect
 PID file in Application      a named kernel mutex
 Support
 ===========================  ==========================================
@@ -133,7 +132,7 @@ class Sounds:
 # -- autostart -----------------------------------------------------------
 
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_RUN_VALUE = "SuperDictate"
+_RUN_VALUE = "D1CT"
 
 
 def _launch_command() -> str:
@@ -174,32 +173,11 @@ def set_autostart(enabled: bool) -> bool:
         return False
 
 
-# -- caret location ------------------------------------------------------
-
-
-class GUITHREADINFO(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", wt.DWORD),
-        ("flags", wt.DWORD),
-        ("hwndActive", wt.HWND),
-        ("hwndFocus", wt.HWND),
-        ("hwndCapture", wt.HWND),
-        ("hwndMenuOwner", wt.HWND),
-        ("hwndMoveSize", wt.HWND),
-        ("hwndCaret", wt.HWND),
-        ("rcCaret", wt.RECT),
-    ]
-
+# -- window plumbing -----------------------------------------------------
 
 # Declared rather than left to ctypes' c_int default, so handles survive
 # intact on a 64-bit build.
 user32.GetForegroundWindow.restype = wt.HWND
-user32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
-user32.GetWindowThreadProcessId.restype = wt.DWORD
-user32.GetGUIThreadInfo.argtypes = [wt.DWORD, ctypes.POINTER(GUITHREADINFO)]
-user32.GetGUIThreadInfo.restype = wt.BOOL
-user32.ClientToScreen.argtypes = [wt.HWND, ctypes.POINTER(wt.POINT)]
-user32.ClientToScreen.restype = wt.BOOL
 user32.RegisterWindowMessageW.argtypes = [wt.LPCWSTR]
 user32.RegisterWindowMessageW.restype = wt.UINT
 user32.PostMessageW.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM]
@@ -208,33 +186,6 @@ kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wt.BOOL, wt.LPCWSTR]
 kernel32.CreateMutexW.restype = wt.HANDLE
 kernel32.CloseHandle.argtypes = [wt.HANDLE]
 kernel32.CloseHandle.restype = wt.BOOL
-
-
-def caret_screen_position() -> Optional[tuple[int, int]]:
-    """Screen coordinates of the focused window's caret, if it exposes one.
-
-    Password fields, Chromium-based apps and anything drawing its own text
-    cursor report nothing — the same limitation the macOS build documents
-    for apps that hide Accessibility data. Callers fall back to a fixed
-    screen position.
-    """
-    info = GUITHREADINFO()
-    info.cbSize = ctypes.sizeof(GUITHREADINFO)
-    foreground = user32.GetForegroundWindow()
-    if not foreground:
-        return None
-    thread_id = user32.GetWindowThreadProcessId(foreground, None)
-    if not thread_id or not user32.GetGUIThreadInfo(thread_id, ctypes.byref(info)):
-        return None
-    if not info.hwndCaret:
-        return None
-
-    point = wt.POINT(info.rcCaret.left, info.rcCaret.bottom)
-    if not user32.ClientToScreen(info.hwndCaret, ctypes.byref(point)):
-        return None
-    if point.x == 0 and point.y == 0:
-        return None
-    return int(point.x), int(point.y)
 
 
 # -- single instance -----------------------------------------------------
@@ -264,7 +215,7 @@ class SingleInstance:
             self._handle = None
 
 
-SHOW_PANEL_MESSAGE = "SuperDictate.ShowControlPanel"
+SHOW_PANEL_MESSAGE = "D1CT.ShowControlPanel"
 
 
 def register_show_message() -> int:

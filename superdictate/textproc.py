@@ -3,11 +3,11 @@
 Straight port of the three passes in ``main.swift``, in the same order the
 macOS app applies them:
 
-1. ``SpeechModelTextRepair`` — Parakeet TDT v3 emits ``<unk>`` where a
+1. ``SpeechModelTextRepair``: Parakeet TDT v3 emits ``<unk>`` where a
    Russian "ё" belongs; repair it for ru/auto, drop it elsewhere.
-2. ``TranscriptCorrector`` — the user's replacement dictionary. Runs
+2. ``TranscriptCorrector``: the user's replacement dictionary. Runs
    before filler removal so explicit corrections always win.
-3. ``FillerWordRemover`` — conservative interjection stripping.
+3. ``FillerWordRemover``: conservative interjection stripping.
 
 Swift's ``NSRegularExpression`` and Python's ``re`` agree on the syntax
 used here except for ``\\p{L}``/``\\p{N}``, which Python lacks; the Unicode
@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from typing import Iterable, Sequence
 
-from .settings import Correction
+from .settings import Correction, TextStyle
 
 # `\p{L}\p{N}` in Swift. Python's `\w` == letters + digits + underscore,
 # so letters-or-digits is `\w` minus underscore.
@@ -161,7 +161,7 @@ def remove_filler_words(text: str) -> tuple[str, int]:
         result = result[:start] + result[end:]
 
     # Clean up the artifacts removal leaves behind, in the same order as
-    # the Swift implementation — the order matters, e.g. pass 3 can glue a
+    # the Swift implementation, the order matters, e.g. pass 3 can glue a
     # comma onto terminal punctuation that pass 4 then has to unglue.
     result = re.sub(r"\s*,(?:\s*,)+", ",", result)
     result = re.sub(r"([.!?])\s+[,.;:!?]+\s*", r"\1 ", result)
@@ -238,6 +238,33 @@ def _restore_capitalization(text: str, targets: set[object]) -> str:
     return "".join(result)
 
 
+# -- 4. text style -------------------------------------------------------
+
+
+def apply_text_style(text: str, style: TextStyle) -> str:
+    """Trim the model's sentence punctuation to the chosen register.
+
+    Only a trailing full stop goes: "?" and "!" carry meaning that the
+    user dictated on purpose, and an ellipsis is not a full stop either.
+    """
+    if style is TextStyle.FORMAL or not text:
+        return text
+
+    stripped = text.rstrip()
+    if stripped.endswith(".") and not stripped.endswith(".."):
+        stripped = stripped[:-1].rstrip()
+    if not stripped:
+        return stripped
+
+    if style is TextStyle.INFORMAL:
+        first = stripped[0]
+        # Only undo the model's own sentence capital. An all-caps word is
+        # almost always an acronym the user actually said that way.
+        if first.isupper() and not stripped[:2].isupper():
+            stripped = first.lower() + stripped[1:]
+    return stripped
+
+
 # -- pipeline ------------------------------------------------------------
 
 
@@ -247,6 +274,7 @@ def process_transcript(
     language: str = "auto",
     corrections: Sequence[Correction] = (),
     strip_fillers: bool = False,
+    style: TextStyle = TextStyle.FORMAL,
 ) -> tuple[str, int, int]:
     """Returns (text, corrections applied, fillers removed)."""
     text = repair_model_text(raw.strip(), language=language)
@@ -254,4 +282,7 @@ def process_transcript(
     removed = 0
     if strip_fillers:
         text, removed = remove_filler_words(text)
+    # Style last: it works on the finished sentence, so filler removal
+    # cannot re-expose a full stop that this pass already took off.
+    text = apply_text_style(text.strip(), style)
     return text.strip(), applied, removed

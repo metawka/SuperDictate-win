@@ -6,7 +6,7 @@ long history never bloats the settings file the app rewrites on every
 preference change.
 
 The archive keeps up to 200 entries regardless of the user's "show last N"
-preference — the preference controls what the quick-history window offers
+preference, the preference controls what the quick-history window offers
 for re-insertion, not how much is retained, exactly as on macOS.
 """
 

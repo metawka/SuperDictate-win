@@ -1,7 +1,7 @@
 """The floating recording capsule.
 
 A frameless, translucent, always-on-top window that shows a live waveform
-while recording and a travelling shimmer while transcribing — the macOS
+while recording and a travelling shimmer while transcribing, the macOS
 recording HUD, with its geometry constants carried over verbatim
 (64x38 base, the same size multipliers, the same animate-in/out timings).
 
@@ -28,13 +28,14 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
 from ..settings import AccentColor, HUDBackground, HUDSize
-from ..system import caret_screen_position
 
 BASE_WIDTH = 64.0
 BASE_HEIGHT = 38.0
 ANIMATE_IN_SECONDS = 0.32
 ANIMATE_OUT_SECONDS = 0.23
-TARGET_REFRESH_INTERVAL_MS = 160
+# Only needed to catch a screen change or a taskbar resize mid-recording.
+TARGET_REFRESH_INTERVAL_MS = 700
+BOTTOM_MARGIN = 24
 FRAME_INTERVAL_MS = 16  # ~60 fps
 BAR_COUNT = 5
 
@@ -161,21 +162,21 @@ class RecordingHUD(QWidget):
     # -- placement ----------------------------------------------------
 
     def _reposition(self) -> None:
-        caret = caret_screen_position()
-        if caret is not None:
-            x, y = caret
-            target = QPoint(int(x - self.width() / 2), int(y + 12))
-        else:
-            # No caret to follow (Chromium, password fields, remote
-            # sessions). Sit above the taskbar on the active screen, the
-            # same fallback the macOS build uses when Accessibility gives
-            # no caret bounds.
-            screen = QApplication.screenAt(_cursor_position()) or QApplication.primaryScreen()
-            area = screen.availableGeometry()
-            target = QPoint(
-                area.center().x() - self.width() // 2,
-                area.bottom() - self.height() - 80,
-            )
+        """Bottom centre of the active screen, always.
+
+        The capsule used to follow the text caret. In practice that made
+        it jump to wherever a window happened to put its cursor, docking
+        it to the top of some apps, and it moved while you spoke. A fixed
+        spot above the taskbar is predictable and never covers what you
+        are typing into.
+        """
+        screen = (QApplication.screenAt(_cursor_position())
+                  or QApplication.primaryScreen())
+        area = screen.availableGeometry()
+        target = QPoint(
+            area.center().x() - self.width() // 2,
+            area.bottom() - self.height() - BOTTOM_MARGIN,
+        )
         target = _clamped_to_screen(target, self.width(), self.height())
         if target != self.pos():
             self.move(target)

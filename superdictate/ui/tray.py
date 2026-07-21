@@ -4,60 +4,64 @@ This is the Windows counterpart of the macOS menu bar item, and it is
 what keeps the app alive: closing every window leaves the tray icon, the
 keyboard hook and the loaded model in place.
 
-The icon is drawn rather than loaded, so it stays crisp at any DPI and
-can recolour itself per state — grey while the model loads, red while
-recording, blue while transcribing — which is the same signalling the
-macOS menubar template images provide.
+The glyph is the product artwork (assets/D1CT.png), so the tray, the
+taskbar, the window frames and the installer all show the same thing.
+State is signalled by a small dot in the corner instead of by recolouring
+the artwork: the icon is a pink gradient, and tinting it red or blue
+would turn the brand mark into a different picture every few seconds.
 """
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPainterPath, QPixmap
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
-from .. import i18n
+from .. import i18n, paths
 from ..app import AppState
 
-_STATE_COLORS = {
+# None means "no badge": the idle state should look like the plain logo.
+_STATE_COLORS: dict[AppState, str | None] = {
     AppState.STARTING: "#8e8e93",
     AppState.DOWNLOADING: "#8e8e93",
     AppState.LOADING: "#8e8e93",
-    AppState.READY: "#f2f2f7",
+    AppState.READY: None,
     AppState.RECORDING: "#ff453a",
     AppState.TRANSCRIBING: "#0a84ff",
     AppState.FAILED: "#ff9f0a",
 }
 
 
-def build_icon(color: str = "#f2f2f7", size: int = 64) -> QIcon:
-    """A microphone glyph: rounded capsule, stand, and base."""
-    pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.GlobalColor.transparent)
+@lru_cache(maxsize=8)
+def _artwork(size: int) -> QPixmap:
+    source = QPixmap(str(paths.resource_path("assets", "D1CT.png")))
+    if source.isNull():
+        return QPixmap()
+    return source.scaled(
+        size, size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
 
+
+def build_icon(badge: str | None = None, size: int = 64) -> QIcon:
+    """The product mark, optionally with a state dot in the corner."""
+    art = _artwork(size)
+    if art.isNull():
+        return QIcon()
+    if badge is None:
+        return QIcon(art)
+
+    pixmap = QPixmap(art)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    diameter = size * 0.34
     painter.setPen(Qt.PenStyle.NoPen)
-    painter.setBrush(QColor(color))
-
-    unit = size / 64.0
-    capsule = QRectF(24 * unit, 10 * unit, 16 * unit, 26 * unit)
-    path = QPainterPath()
-    path.addRoundedRect(capsule, 8 * unit, 8 * unit)
-    painter.drawPath(path)
-
-    arc = QPainterPath()
-    arc.moveTo(18 * unit, 30 * unit)
-    arc.arcTo(QRectF(18 * unit, 20 * unit, 28 * unit, 26 * unit), 180, 180)
-    painter.setPen(QColor(color))
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-    pen = painter.pen()
-    pen.setWidthF(3.4 * unit)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    painter.setPen(pen)
-    painter.drawPath(arc)
-    painter.drawLine(int(32 * unit), int(46 * unit), int(32 * unit), int(54 * unit))
-    painter.drawLine(int(24 * unit), int(54 * unit), int(40 * unit), int(54 * unit))
+    painter.setBrush(QColor(badge))
+    painter.drawEllipse(
+        QRectF(size - diameter, size - diameter, diameter, diameter))
     painter.end()
     return QIcon(pixmap)
 
@@ -111,7 +115,7 @@ class Tray(QSystemTrayIcon):
         self._apply_state(AppState(value))
 
     def _apply_state(self, state: AppState) -> None:
-        self.setIcon(build_icon(_STATE_COLORS.get(state, "#f2f2f7")))
+        self.setIcon(build_icon(_STATE_COLORS.get(state)))
         label = {
             AppState.STARTING: "status_starting",
             AppState.DOWNLOADING: "status_downloading",
@@ -121,7 +125,7 @@ class Tray(QSystemTrayIcon):
             AppState.TRANSCRIBING: "status_transcribing",
             AppState.FAILED: "status_failed",
         }.get(state, "status_starting")
-        self.setToolTip(f"{i18n.tr('app_name')} — {i18n.tr(label)}")
+        self.setToolTip(f"{i18n.tr('app_name')}: {i18n.tr(label)}")
         self._toggle_action.setText(
             i18n.tr("tray_stop") if state is AppState.RECORDING
             else i18n.tr("tray_start")

@@ -3,13 +3,13 @@
 The macOS build runs Parakeet TDT v3 through FluidAudio on the Apple
 Neural Engine. Windows has no ANE, so the same model runs through ONNX
 Runtime via ``onnx-asr``, which resolves the weights from
-``istupakov/parakeet-tdt-0.6b-v3-onnx`` — the same NVIDIA checkpoint,
+``istupakov/parakeet-tdt-0.6b-v3-onnx``, the same NVIDIA checkpoint,
 same 25 languages, same vocabulary.
 
 Two weight sets exist upstream and both are offered:
 
-* ``int8`` — 640 MB, matching the macOS on-disk footprint. Default.
-* ``fp32`` — 2.4 GB, meaningfully better on a CUDA GPU, where int8
+* ``int8``, 640 MB, matching the macOS on-disk footprint. Default.
+* ``fp32``, 2.4 GB, meaningfully better on a CUDA GPU, where int8
   kernels are not the fast path.
 
 One caveat versus macOS: FluidAudio exposes a per-language decoder script
@@ -283,7 +283,7 @@ class SpeechModel:
         """First inference allocates kernels and, on CUDA, compiles them.
 
         Doing it at load time keeps the first real dictation from paying a
-        multi-second penalty — the same reason the macOS build primes
+        multi-second penalty, the same reason the macOS build primes
         FluidAudio right after the model finishes loading.
         """
         try:

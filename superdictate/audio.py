@@ -28,7 +28,7 @@ log = get_logger("audio")
 SAMPLE_RATE = 16_000
 MAX_RECORDING_SECONDS = 20 * 60
 MIN_CLIP_SECONDS = 0.25
-BLOCK_FRAMES = 512  # 32 ms — smooth enough for the waveform, cheap enough to log
+BLOCK_FRAMES = 512  # 32 ms, smooth enough for the waveform, cheap enough to log
 
 PENDING_MAGIC = b"SDPD"
 PENDING_VERSION = 1
@@ -107,7 +107,7 @@ def resolve_device(name: str) -> Optional[int]:
 def device_sample_rate(device_index: Optional[int]) -> int:
     """The rate a device will actually open at.
 
-    WASAPI in shared mode only accepts the endpoint's own mix rate — asking
+    WASAPI in shared mode only accepts the endpoint's own mix rate, asking
     a 48 kHz microphone for 16 kHz fails outright with "Invalid sample
     rate", which is why every explicitly-chosen device used to be rejected
     while the system default (routed through MME, which resamples for us)
@@ -246,7 +246,7 @@ class Recorder:
         self._recording = True
         log.info("Recording started (device=%s, %d Hz%s)",
                  device_name or "system default", self._capture_rate,
-                 "" if self._capture_rate == SAMPLE_RATE else " — resampling to 16 kHz")
+                 "" if self._capture_rate == SAMPLE_RATE else ", resampling to 16 kHz")
         return True
 
     def stop(self) -> np.ndarray:
@@ -319,7 +319,7 @@ class Recorder:
             self._silence_started_at = 0.0
             return False
         if not self._heard_speech:
-            # Nothing said yet — the user is still gathering their thoughts.
+            # Nothing said yet, the user is still gathering their thoughts.
             return False
         if rms >= SILENCE_RMS_THRESHOLD:
             return False
