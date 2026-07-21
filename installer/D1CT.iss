@@ -8,7 +8,7 @@
 ;   & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\D1CT.iss
 
 #define AppName        "D1CT"
-#define AppVersion     "1.5.3"
+#define AppVersion     "1.5.4"
 #define AppPublisher   "metawka"
 #define AppURL         "https://github.com/metawka/SuperDictate-win"
 #define AppExeName     "D1CT.exe"

@@ -219,6 +219,15 @@ def test_casual_style() -> None:
     _check("casual: acronyms survive the pass",
            apply_text_style("Это HTTP. HTTP работает.", TextStyle.CASUAL),
            "это HTTP, HTTP работает")
+    # No capitals at all, not just none after a full stop: the model
+    # capitalises for reasons of its own, and mid-sentence ones survived
+    # a pass that only looked at sentence starts.
+    _check("casual: a capital after a comma also goes",
+           apply_text_style("Привет, Как дела?", TextStyle.CASUAL),
+           "привет, как дела?")
+    _check("casual: proper nouns are lowered too",
+           apply_text_style("Вчера Москва не спала.", TextStyle.CASUAL),
+           "вчера москва не спала")
 
 
 def test_pipeline_order() -> None:

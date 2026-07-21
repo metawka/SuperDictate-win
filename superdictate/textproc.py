@@ -267,17 +267,35 @@ def _lower_first_word(text: str) -> str:
     return text[:1].lower() + text[1:]
 
 
+# A word, hyphens and apostrophes included, so "USB-C" and "don't" are
+# each one word rather than two halves.
+_WORD = re.compile(r"[^\W_]+(?:['\-][^\W_]+)*", re.UNICODE)
+
+
+def _lower_all_words(text: str) -> str:
+    """Every word in lower case, acronyms excepted.
+
+    The casual style has no capitals at all, not just no capital at the
+    start. Lowering only the word after a full stop left everything the
+    model capitalised for its own reasons ("привет, Как дела?") standing.
+    """
+    return _WORD.sub(
+        lambda m: m.group(0) if _is_acronym(m.group(0)) else m.group(0).lower(),
+        text,
+    )
+
+
 def _soften_sentence_breaks(text: str) -> str:
     """Run the sentences together the way speech does.
 
     A full stop between two sentences becomes a comma. Anything else, a
     question mark, an exclamation, an ellipsis, stays as it is, because
-    it carries a tone a comma cannot. Either way the next sentence loses
-    its capital. The final stop is left to the caller, which removes it.
+    it carries a tone a comma cannot. Case is not this pass's business;
+    the final stop is left to the caller, which removes it.
     """
     def replace(match: re.Match) -> str:
         marks = match.group(1)
-        return f"{',' if marks == '.' else marks} {_lower_first_word(match.group(2))}"
+        return f"{',' if marks == '.' else marks} {match.group(2)}"
 
     return _SENTENCE_BREAK.sub(replace, text)
 
@@ -293,13 +311,13 @@ def apply_text_style(text: str, style: TextStyle) -> str:
 
     stripped = text.rstrip()
     if style is TextStyle.CASUAL:
-        stripped = _soften_sentence_breaks(stripped)
+        stripped = _lower_all_words(_soften_sentence_breaks(stripped))
     if stripped.endswith(".") and not stripped.endswith(".."):
         stripped = stripped[:-1].rstrip()
     if not stripped:
         return stripped
 
-    if style in (TextStyle.INFORMAL, TextStyle.CASUAL):
+    if style is TextStyle.INFORMAL:
         stripped = _lower_first_word(stripped)
     return stripped
 

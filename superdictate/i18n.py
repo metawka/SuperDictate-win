@@ -85,13 +85,12 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_text_style_casual": ("Разговорный", "Casual"),
     "settings_text_style_hint": (
         "Формальный: как распознала модель. Стандартный: без точки в конце. "
-        "Неформальный: без точки и с маленькой буквы. Разговорный: то же, "
-        "плюс точки внутри заменяются запятыми, а всё после них идёт с "
-        "маленькой буквы.",
+        "Неформальный: без точки и с маленькой буквы. Разговорный: без "
+        "заглавных вообще, кроме аббревиатур, а точки внутри заменяются "
+        "запятыми.",
         "Formal: exactly as recognised. Standard: no full stop at the end. "
-        "Informal: no full stop and no leading capital. Casual: the same, "
-        "plus inner full stops become commas and nothing after them is "
-        "capitalised.",
+        "Informal: no full stop and no leading capital. Casual: no capitals "
+        "at all except acronyms, and inner full stops become commas.",
     ),
     "settings_enter_delay": ("Задержка перед Enter, мс", "Delay before Enter, ms"),
     "settings_paste_suffix": ("После вставки", "After insertion"),
