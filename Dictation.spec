@@ -26,7 +26,7 @@ datas += copy_metadata("onnxruntime")
 # The tray icon is drawn from the product mark at runtime, so the PNG has
 # to travel with the build; the .ico only covers the window/taskbar icon
 # that Windows reads from the executable itself.
-datas += [("assets/D1CT.png", "assets")]
+datas += [("assets/Dictation.png", "assets")]
 # The recording cues are played straight off disk by winsound.
 datas += [("assets/record-start.wav", "assets"),
           ("assets/record-stop.wav", "assets")]
@@ -73,7 +73,7 @@ exe = EXE(
     upx=False,
     console=False,          # tray app: a console window would flash on login
     disable_windowed_traceback=False,
-    icon="assets/D1CT.ico",
+    icon="assets/Dictation.ico",
 )
 
 coll = COLLECT(

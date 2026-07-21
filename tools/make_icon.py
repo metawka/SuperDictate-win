@@ -1,10 +1,12 @@
-"""Pack assets/D1CT.png into assets/D1CT.ico.
+"""Pack assets/Dictation.png into assets/Dictation.ico.
 
 Windows wants a multi-size .ico for the executable, the installer and the
-Explorer entry. The artwork is a single 500x500 PNG, so this only rescales
+Explorer entry. The artwork is a single square PNG, so this only rescales
 it; the tray builds its own QIcon from the same file at runtime.
 
-Run from the repository root::
+Part of the build: ``build.ps1`` runs this before PyInstaller, so the .ico
+always matches the artwork in the repository. Run it by hand from the
+repository root after changing that artwork::
 
     python tools/make_icon.py
 """
@@ -22,7 +24,7 @@ from PySide6.QtCore import QBuffer, QByteArray, Qt  # noqa: E402
 from PySide6.QtGui import QGuiApplication, QPixmap  # noqa: E402
 
 SIZES = (16, 24, 32, 48, 64, 128, 256)
-SOURCE = ROOT / "assets" / "D1CT.png"
+SOURCE = ROOT / "assets" / "Dictation.png"
 
 
 def png_bytes(source: QPixmap, size: int) -> bytes:
@@ -63,7 +65,7 @@ def main() -> int:
         print(f"missing or unreadable artwork: {SOURCE}", file=sys.stderr)
         return 1
     images = [(size, png_bytes(source, size)) for size in SIZES]
-    target = ROOT / "assets" / "D1CT.ico"
+    target = ROOT / "assets" / "Dictation.ico"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(build_ico(images))
     print(f"wrote {target} ({target.stat().st_size} bytes, {len(images)} sizes)")

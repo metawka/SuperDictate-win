@@ -4,11 +4,11 @@ This is the Windows counterpart of the macOS menu bar item, and it is
 what keeps the app alive: closing every window leaves the tray icon, the
 keyboard hook and the loaded model in place.
 
-The glyph is the product artwork (assets/D1CT.png), so the tray, the
+The glyph is the product artwork (assets/Dictation.png), so the tray, the
 taskbar, the window frames and the installer all show the same thing.
 State is signalled by a small dot in the corner instead of by recolouring
-the artwork: the icon is a pink gradient, and tinting it red or blue
-would turn the brand mark into a different picture every few seconds.
+the artwork: the mark is a gradient, and tinting it red or blue would turn
+it into a different picture every few seconds.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ _STATE_COLORS: dict[AppState, str | None] = {
 
 @lru_cache(maxsize=8)
 def _artwork(size: int) -> QPixmap:
-    source = QPixmap(str(paths.resource_path("assets", "D1CT.png")))
+    source = QPixmap(str(paths.resource_path("assets", "Dictation.png")))
     if source.isNull():
         return QPixmap()
     return source.scaled(

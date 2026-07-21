@@ -8,7 +8,7 @@
 ;   & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\Dictation.iss
 
 #define AppName        "Dictation"
-#define AppVersion     "1.8.1"
+#define AppVersion     "1.8.2"
 #define AppPublisher   "metawka"
 #define AppURL         "https://github.com/metawka/SuperDictate-win"
 #define AppExeName     "Dictation.exe"
@@ -28,7 +28,7 @@ DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist
 OutputBaseFilename=Dictation-{#AppVersion}-setup
-SetupIconFile=..\assets\D1CT.ico
+SetupIconFile=..\assets\Dictation.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2/max
 SolidCompression=yes

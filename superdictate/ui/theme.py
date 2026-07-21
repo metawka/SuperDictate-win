@@ -22,6 +22,7 @@ class Palette:
     text_muted: str      # readable secondary text, not a border colour
     text_faint: str      # captions only
     accent: str
+    accent_hover: str    # the accent one step away from the surface
     accent_text: str
     control: str
     control_hover: str
@@ -45,10 +46,12 @@ DARK = Palette(
     text="#f2f2f7",
     text_muted="#a9adb8",
     text_faint="#787d89",
-    # The product mark's pink. It is far too light to carry white text, so
-    # the accent's foreground is near-black in both themes.
-    accent="#f4b8f7",
-    accent_text="#241028",
+    # White, and so too light to carry white text: the accent's foreground
+    # is near-black in both themes. Hovering has to darken rather than
+    # lighten here, since there is nothing above white to move toward.
+    accent="#ffffff",
+    accent_hover="#dcdee6",
+    accent_text="#14161a",
     control="#2b2d34",
     control_hover="#343740",
     control_border="#3a3d47",
@@ -67,8 +70,12 @@ LIGHT = Palette(
     text="#14161a",
     text_muted="#5b6070",
     text_faint="#8d92a1",
-    accent="#e79bec",
-    accent_text="#241028",
+    # The dark theme's white on a white card would be an invisible button
+    # and an invisible tick, so the light theme takes the same neutral
+    # accent from the other end of the scale.
+    accent="#14161a",
+    accent_hover="#2f333d",
+    accent_text="#ffffff",
     control="#ffffff",
     control_hover="#eef0f4",
     control_border="#d3d6de",
@@ -79,15 +86,6 @@ LIGHT = Palette(
     danger="#d70015",
     warning="#b25000",
 )
-
-
-def _lighten(hex_color: str, amount: float) -> str:
-    """Move a colour toward white, for hover states."""
-    raw = hex_color.lstrip("#")
-    channels = (int(raw[index:index + 2], 16) for index in (0, 2, 4))
-    return "#" + "".join(
-        f"{int(value + (255 - value) * amount):02x}" for value in channels
-    )
 
 
 def system_is_dark() -> bool:
@@ -166,7 +164,7 @@ def stylesheet(p: Palette | None = None) -> str:
         color: {p.accent_text};
         font-weight: 600;
     }}
-    QPushButton#Primary:hover {{ background: {_lighten(p.accent, 0.35)}; }}
+    QPushButton#Primary:hover {{ background: {p.accent_hover}; }}
 
     QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QListWidget, QPlainTextEdit {{
         background: {p.field};

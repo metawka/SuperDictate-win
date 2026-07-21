@@ -12,11 +12,9 @@ Swift), который, в свою очередь, основан на Parakey 
 
 ## Установка
 
-**Установщик**: [`Dictation-1.8.1-setup.exe`](https://github.com/metawka/SuperDictate-win/releases/latest)
+**Установщик**: [`Dictation-1.8.2-setup.exe`](https://github.com/metawka/SuperDictate-win/releases/latest)
 (~52 МБ). Ставится в профиль пользователя, права администратора не нужны,
 в мастере можно сразу включить автозапуск при входе в Windows.
-
-Портативно: распаковать папку `Dictation` из релиза и запустить `Dictation.exe`.
 
 Из исходников:
 
