@@ -150,6 +150,11 @@ class DictationController(QObject):
             log.debug("Cleared %d stray modifier(s) left over from a previous run",
                       len(stray))
 
+        # Same idea for the speakers: a run that died mid-recording left
+        # them muted, and a silent machine is a lot harder to connect to
+        # this app than a stuck Shift.
+        self.output_mute.recover()
+
         self.listener.start()
         if not self.listener.installed:
             log.error("Keyboard hook could not be installed")

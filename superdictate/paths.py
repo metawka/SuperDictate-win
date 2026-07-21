@@ -45,6 +45,10 @@ HISTORY_FILE = BASE_DIR / "History.json"
 USAGE_FILE = BASE_DIR / "Usage.json"
 CORRECTIONS_FILE = BASE_DIR / "Corrections.json"
 PENDING_DICTATION_FILE = BASE_DIR / "PendingDictation.raw"
+# Present only while the app is holding the system output muted. Left
+# behind by a run that died mid-recording, and cleared by the next one
+# after it unmutes.
+MUTE_MARKER_FILE = BASE_DIR / "OutputMuted.flag"
 LOG_DIR = BASE_DIR / "Logs"
 LOG_FILE = LOG_DIR / "Dictation.log"
 CRASH_FILE = LOG_DIR / "Crash.log"

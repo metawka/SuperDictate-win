@@ -16,6 +16,7 @@ Support
 
 from __future__ import annotations
 
+import atexit
 import ctypes
 import ctypes.wintypes as wt
 import io
@@ -69,14 +70,22 @@ class OutputMute:
     """Mutes the default playback device for the duration of a recording.
 
     macOS mutes so the microphone does not pick up whatever is playing.
-    The same reasoning applies here, plus the restore-on-exit guarantee:
-    if the app dies mid-recording the user is left with a muted machine,
-    so the previous state is also restored from ``atexit``.
+    The same reasoning applies here, but the device mute flag outlives the
+    process that set it: whatever kills the app mid-recording — a crash, a
+    killed task, a power loss — leaves the machine silent, with nothing on
+    screen to connect the silence to this app.
+
+    So the mute is guarded twice. ``atexit`` covers an orderly exit and an
+    unhandled exception, and a marker file on disk covers everything else:
+    it is written before the device is touched and removed after it is put
+    back, so the next launch can see that the last one muted and never
+    unmuted, and undo it.
     """
 
     def __init__(self) -> None:
         self._previous: Optional[bool] = None
         self._lock = threading.Lock()
+        atexit.register(self.restore)
 
     def _endpoint(self):
         from pycaw.pycaw import IAudioEndpointVolume
@@ -94,6 +103,9 @@ class OutputMute:
                 volume = self._endpoint()
                 self._previous = bool(volume.GetMute())
                 if not self._previous:
+                    # Written first: a marker that arrives after the mute
+                    # would be missing in exactly the case it exists for.
+                    _write_mute_marker()
                     volume.SetMute(1, None)
             except Exception as exc:
                 log.warning("Could not mute system output: %s", exc)
@@ -112,8 +124,52 @@ class OutputMute:
 
                 comtypes.CoInitialize()
                 self._endpoint().SetMute(0, None)
+                _clear_mute_marker()
             except Exception as exc:
                 log.warning("Could not restore system output: %s", exc)
+
+    @staticmethod
+    def recover() -> bool:
+        """Undo a mute left behind by a previous run. Returns True if it did.
+
+        Called at startup. The marker means the last run muted the device
+        and never got as far as putting it back, so the user has been
+        looking at a silent machine with no idea why.
+        """
+        if not paths.MUTE_MARKER_FILE.exists():
+            return False
+        try:
+            import comtypes
+
+            comtypes.CoInitialize()
+            _speaker_interface(_endpoint_volume_type()).SetMute(0, None)
+            log.info("Restored system output muted by a previous run")
+        except Exception as exc:
+            log.warning("Could not restore output after a previous run: %s", exc)
+            return False
+        finally:
+            _clear_mute_marker()
+        return True
+
+
+def _endpoint_volume_type():
+    from pycaw.pycaw import IAudioEndpointVolume
+
+    return IAudioEndpointVolume
+
+
+def _write_mute_marker() -> None:
+    try:
+        paths.MUTE_MARKER_FILE.write_text("muted", encoding="utf-8")
+    except OSError as exc:
+        log.warning("Could not write the mute marker: %s", exc)
+
+
+def _clear_mute_marker() -> None:
+    try:
+        paths.MUTE_MARKER_FILE.unlink(missing_ok=True)
+    except OSError as exc:
+        log.warning("Could not clear the mute marker: %s", exc)
 
 
 # -- media pause ---------------------------------------------------------
