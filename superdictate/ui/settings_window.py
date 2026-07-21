@@ -105,7 +105,9 @@ def _page(*sections: QWidget) -> QWidget:
     """Wrap sections in a scrollable page so a tall tab never clips."""
     inner = QWidget()
     layout = QVBoxLayout(inner)
-    layout.setContentsMargins(14, 14, 14, 14)
+    # No side margins: the dialog already insets the tab widget, and a
+    # second inset made the cards look adrift in their own frame.
+    layout.setContentsMargins(0, 12, 0, 0)
     layout.setSpacing(12)
     for section in sections:
         layout.addWidget(section)
@@ -122,7 +124,11 @@ class SettingsWindow(QDialog):
     def __init__(self, settings: Settings, corrections, controller, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(i18n.tr("settings_title"))
-        self.setMinimumSize(620, 600)
+        # Wide enough for all five tabs. Narrower and Qt hides the last one
+        # behind scroll arrows, which is how a settings dialog loses a tab
+        # nobody ever finds.
+        self.setMinimumSize(720, 620)
+        self.resize(760, 700)
 
         self._settings = settings
         self._corrections = corrections
@@ -137,6 +143,8 @@ class SettingsWindow(QDialog):
 
         self._tabs = QTabWidget()
         self._tabs.setIconSize(icons.icon_size(16))
+        self._tabs.tabBar().setUsesScrollButtons(False)
+        self._tabs.tabBar().setExpanding(False)
         muted = self._palette.text_muted
         tabs = (
             ("keyboard", "settings_tab_hotkeys", self._build_shortcuts_tab),

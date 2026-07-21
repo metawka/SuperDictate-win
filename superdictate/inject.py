@@ -157,6 +157,24 @@ def release_modifiers() -> list[int]:
     return held
 
 
+def clear_stuck_modifiers() -> list[int]:
+    """Send a key-up for every modifier that is *not* physically held.
+
+    A crash or a kill from Task Manager can end the process between a
+    suppressed key-down and the key-up that would have balanced it, and the
+    foreground app is then left believing Ctrl or Shift is still down:
+    typing produces shortcuts instead of letters. A key-up for a key that
+    is genuinely up is a no-op everywhere else, so this is safe to fire on
+    every launch, and it never fights a modifier the user is really
+    holding.
+    """
+    down = set(_pressed_modifiers())
+    stray = [vk for vk in _ALL_MODIFIERS if vk not in down]
+    if stray:
+        _send([_make_input(vk, key_up=True) for vk in stray])
+    return stray
+
+
 # -- clipboard -----------------------------------------------------------
 
 

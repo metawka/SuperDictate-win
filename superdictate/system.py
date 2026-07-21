@@ -7,7 +7,7 @@ Each of these replaces a macOS-specific mechanism:
 macOS                        Windows
 ===========================  ==========================================
 CoreAudio default device     ``IAudioEndpointVolume`` via pycaw
-``NSSound`` system sounds    ``winsound`` system events
+``NSSound`` system sounds    generated tones via ``winsound``
 ``~/Library/LaunchAgents``   ``HKCU\\...\\CurrentVersion\\Run``
 PID file in Application      a named kernel mutex
 Support
@@ -18,8 +18,13 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes as wt
+import io
+import math
+import struct
 import sys
 import threading
+import wave
+from functools import lru_cache
 from typing import Optional
 
 from . import paths
@@ -93,19 +98,65 @@ class OutputMute:
 # -- feedback sounds -----------------------------------------------------
 
 
+CUE_SAMPLE_RATE = 44100
+
+
+@lru_cache(maxsize=8)
+def _cue(segments: tuple[tuple[int, int], ...], volume: float = 0.22) -> bytes:
+    """Render a sequence of (frequency Hz, duration ms) tones to a WAV.
+
+    A frequency of zero is silence. The phase carries across segments and
+    the whole clip gets a short attack and release, because a sine that
+    starts or stops at a non-zero value clicks, and a click is exactly the
+    kind of cheap-sounding detail these cues exist to avoid.
+    """
+    total = sum(CUE_SAMPLE_RATE * ms // 1000 for _, ms in segments)
+    attack = int(CUE_SAMPLE_RATE * 0.004)
+    release = int(CUE_SAMPLE_RATE * 0.020)
+    frames = bytearray()
+    phase = 0.0
+    index = 0
+
+    for frequency, milliseconds in segments:
+        count = CUE_SAMPLE_RATE * milliseconds // 1000
+        step = 2.0 * math.pi * frequency / CUE_SAMPLE_RATE
+        for _ in range(count):
+            if index < attack:
+                envelope = index / attack
+            elif index > total - release:
+                envelope = max(0.0, (total - index) / release)
+            else:
+                envelope = 1.0
+            sample = math.sin(phase) if frequency else 0.0
+            frames += struct.pack("<h", int(32767 * volume * envelope * sample))
+            phase += step
+            index += 1
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(CUE_SAMPLE_RATE)
+        out.writeframes(bytes(frames))
+    return buffer.getvalue()
+
+
 class Sounds:
     """Short non-blocking cues for start / stop / error.
 
-    Windows system event sounds are used rather than bundled WAVs so the
-    cues respect the user's sound scheme and stay silent when they have
-    chosen "No Sounds".
+    These used to be Windows system event sounds, which meant "recording
+    started" was whatever the user's theme assigned to Asterisk: often a
+    long chime, sometimes the same sound as an error dialog, and on a
+    silent theme nothing at all. The cues are synthesised instead, so the
+    pitch itself carries the meaning, rising to start and falling to stop,
+    and they stay short enough not to bleed into the recording.
     """
 
-    _EVENTS = {
-        "start": "SystemAsterisk",
-        "stop": "SystemExclamation",
-        "error": "SystemHand",
-        "rejected": "SystemQuestion",
+    _EVENTS: dict[str, tuple[tuple[int, int], ...]] = {
+        "start": ((660, 45), (990, 60)),
+        "stop": ((990, 45), (660, 60)),
+        "error": ((330, 90), (0, 45), (330, 110)),
+        "rejected": ((420, 55),),
     }
 
     def __init__(self, enabled: bool = True) -> None:
@@ -114,17 +165,20 @@ class Sounds:
     def play(self, event: str) -> None:
         if not self.enabled:
             return
-        alias = self._EVENTS.get(event)
-        if alias is None:
+        segments = self._EVENTS.get(event)
+        if segments is None:
             return
 
         def worker() -> None:
             try:
                 import winsound
 
-                winsound.PlaySound(alias, winsound.SND_ALIAS | winsound.SND_ASYNC)
-            except Exception:
-                pass
+                # SND_MEMORY with SND_ASYNC needs the buffer to outlive the
+                # call; the lru_cache is what keeps it alive.
+                winsound.PlaySound(_cue(segments),
+                                   winsound.SND_MEMORY | winsound.SND_ASYNC)
+            except Exception as exc:
+                log.debug("Could not play the %s cue: %s", event, exc)
 
         threading.Thread(target=worker, name="sound", daemon=True).start()
 

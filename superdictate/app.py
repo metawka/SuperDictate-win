@@ -122,6 +122,14 @@ class DictationController(QObject):
     # -- startup / shutdown -------------------------------------------
 
     def start(self) -> None:
+        # A previous run killed from Task Manager can leave the foreground
+        # app convinced a modifier is still down. Correct that before the
+        # hook goes in, while nothing of ours is suppressing anything.
+        stray = inject.clear_stuck_modifiers()
+        if stray:
+            log.debug("Cleared %d stray modifier(s) left over from a previous run",
+                      len(stray))
+
         self.listener.start()
         if not self.listener.installed:
             log.error("Keyboard hook could not be installed")
@@ -274,6 +282,10 @@ class DictationController(QObject):
         if duration < audio.MIN_CLIP_SECONDS:
             log.info("Discarding %.2fs clip (below %.2fs minimum)",
                      duration, audio.MIN_CLIP_SECONDS)
+            # Same cleanup as a cancel. Without it the toggle stays flipped
+            # on, so the next press emits a discarded .release and the
+            # hotkey looks dead until it is pressed a third time.
+            self.listener.reset_toggle()
             self._set_state(AppState.READY)
             self.error_raised.emit(i18n.tr("error_too_short"))
             return

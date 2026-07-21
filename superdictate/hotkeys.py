@@ -363,6 +363,10 @@ user32.CallNextHookEx.argtypes = [
     ctypes.POINTER(KBDLLHOOKSTRUCT),
 ]
 user32.UnhookWindowsHookEx.argtypes = [wt.HHOOK]
+# Undeclared, ctypes would return a c_int and the 0x8000 "held" bit of the
+# c_short result could not be tested reliably.
+user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+user32.GetAsyncKeyState.restype = ctypes.c_short
 
 # Marker written into dwExtraInfo of every event SendInput generates on
 # our behalf, so the hook can tell our synthetic Ctrl+V apart from a real
@@ -376,7 +380,6 @@ class HotkeyListener:
     def __init__(self, on_actions: Callable[[Iterable[Action]], None]) -> None:
         self._on_actions = on_actions
         self._machine = HotkeyStateMachine()
-        self._pressed_modifiers: set[int] = set()
         self._down_keys: set[int] = set()
         self._thread: Optional[threading.Thread] = None
         self._thread_id: int = 0
@@ -424,7 +427,6 @@ class HotkeyListener:
     def reset_state(self) -> None:
         with self._lock:
             self._machine.reset_all()
-            self._pressed_modifiers.clear()
             self._down_keys.clear()
 
     def reset_toggle(self) -> None:
@@ -446,10 +448,29 @@ class HotkeyListener:
             user32.UnhookWindowsHookEx(self._hook)
             self._hook = None
 
-    def _modifier_mask(self) -> int:
+    def _modifier_mask(self, event_vk: int, event_is_down: bool) -> int:
+        """What is held right now, asked of Windows rather than remembered.
+
+        An accumulated set only knows what the hook was shown, and it is
+        shown less than everything: it starts blind to keys already held
+        when it installs, it deliberately skips its own injected releases,
+        and a hook earlier in the chain can eat an event outright. Once the
+        set drifts, the state machine suppresses a key-up whose key-down it
+        never suppressed, and the foreground app is left believing the key
+        is still down. That is the "a key is stuck and nothing types" bug.
+
+        The event being processed is applied on top: the low-level hook
+        runs before Windows updates its own key state, so GetAsyncKeyState
+        does not report this keystroke yet.
+        """
         mask = 0
-        for vk in self._pressed_modifiers:
-            mask |= MODIFIER_VK_FLAG.get(vk, 0)
+        for vk, flag in MODIFIER_VK_FLAG.items():
+            if vk == event_vk:
+                held = event_is_down
+            else:
+                held = bool(user32.GetAsyncKeyState(vk) & 0x8000)
+            if held:
+                mask |= flag
         return mask
 
     def _callback(self, code: int, wparam: int, lparam) -> int:
@@ -475,16 +496,11 @@ class HotkeyListener:
                 self._down_keys.add(vk)
             else:
                 self._down_keys.discard(vk)
-            if vk in MODIFIER_VK_FLAG:
-                if is_down:
-                    self._pressed_modifiers.add(vk)
-                else:
-                    self._pressed_modifiers.discard(vk)
-
             if self.paused:
                 return user32.CallNextHookEx(None, code, wparam, lparam)
 
-            event = _Event(vk=vk, is_down=is_down, modifiers=self._modifier_mask(),
+            event = _Event(vk=vk, is_down=is_down,
+                           modifiers=self._modifier_mask(vk, is_down),
                            is_repeat=is_repeat)
             try:
                 result = self._machine.transition(

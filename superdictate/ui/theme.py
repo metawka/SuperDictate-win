@@ -188,11 +188,12 @@ def stylesheet(p: Palette | None = None) -> str:
     QCheckBox::indicator:hover {{ border-color: {p.accent}; }}
     QCheckBox:disabled {{ color: {p.text_faint}; }}
 
+    /* No frame around the pane: every section inside is already a card,
+       and a card drawn inside a card left a visible dead margin between
+       the two borders and a large empty box under a short tab. */
     QTabWidget::pane {{
-        border: 1px solid {p.card_border};
-        border-radius: 12px;
-        background: {p.card};
-        top: -1px;
+        border: none;
+        background: transparent;
     }}
     QTabBar::tab {{
         background: transparent;
