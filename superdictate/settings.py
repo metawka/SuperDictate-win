@@ -205,6 +205,7 @@ _DEFAULTS: dict[str, Any] = {
     "enter_delay_milliseconds": 120,
     "recent_transcript_limit": DEFAULT_RECENT_LIMIT,
     "show_recording_waveform": True,
+    "live_preview": True,
     "hud_recording_color": AccentColor.RED.value,
     "hud_transcribing_color": AccentColor.BLUE.value,
     "status_ready_color": AccentColor.GREEN.value,
@@ -332,6 +333,10 @@ class Settings:
     @property
     def show_recording_waveform(self) -> bool:
         return bool(self._get("show_recording_waveform"))
+
+    @property
+    def live_preview(self) -> bool:
+        return bool(self._get("live_preview"))
 
     @property
     def hud_recording_color(self) -> ColorSpec:

@@ -118,6 +118,18 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_autostart": ("Запускать при входе в Windows", "Start at Windows login"),
     "settings_check_updates": ("Проверять обновления", "Check for updates"),
     "settings_waveform": ("Показывать капсулу с волной", "Show waveform capsule"),
+    "settings_live_preview": ("Показывать текст во время записи",
+                              "Show text while recording"),
+    "settings_live_preview_hint": (
+        "Над капсулой появляется вторая, поменьше, с расшифровкой на ходу. "
+        "Слова по мере речи могут переписываться, а окончательный текст "
+        "распознаётся заново после остановки. Занимает процессор всё время "
+        "записи.",
+        "A second, smaller capsule above the first, transcribing as you "
+        "speak. Words can be rewritten as more audio arrives, and the final "
+        "text is recognised again once recording stops. Costs CPU for the "
+        "whole recording.",
+    ),
     "settings_hud_size": ("Размер капсулы", "Capsule size"),
     "settings_hud_size_compact": ("Компактный", "Compact"),
     "settings_hud_size_standard": ("Стандартный", "Standard"),

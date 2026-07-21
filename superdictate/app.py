@@ -37,6 +37,16 @@ from .settings import CompletionBehavior, Settings
 
 log = get_logger("app")
 
+# Live preview. The model is not a streaming one: each pass re-reads the
+# audio from the start, so the cost grows with the length of the dictation
+# and the interval has to grow with it. PREVIEW_DUTY is the share of one
+# core the preview is allowed to keep busy; the rest of the time it waits.
+PREVIEW_FIRST_DELAY = 1.0
+PREVIEW_MIN_INTERVAL = 0.7
+PREVIEW_MIN_AUDIO_SECONDS = 0.6
+PREVIEW_WINDOW_SECONDS = 30.0
+PREVIEW_DUTY = 0.5
+
 
 class AppState(str, Enum):
     STARTING = "starting"
@@ -62,6 +72,7 @@ class DictationController(QObject):
     state_changed = Signal(str)            # AppState value
     progress_changed = Signal(object)      # asr.Progress
     level_changed = Signal(float)
+    preview_changed = Signal(str)         # partial text while recording
     transcript_ready = Signal(str)
     error_raised = Signal(str)
     history_toggle_requested = Signal()
@@ -81,6 +92,7 @@ class DictationController(QObject):
         self._jobs: "queue.Queue[Optional[_Job]]" = queue.Queue()
         self._worker: Optional[threading.Thread] = None
         self._model: Optional[asr.SpeechModel] = None
+        self._preview_stop: Optional[threading.Event] = None
         self._terminating = False
         self.last_error: str = ""
 
@@ -143,6 +155,7 @@ class DictationController(QObject):
 
     def shutdown(self) -> None:
         self._terminating = True
+        self._stop_preview()
         try:
             if self.recorder.is_recording:
                 self.recorder.discard()
@@ -259,6 +272,7 @@ class DictationController(QObject):
             return
         self._set_state(AppState.RECORDING)
         self.sounds.play("start")
+        self._start_preview()
 
     @staticmethod
     def _microphone_error_message(reason: str) -> str:
@@ -273,6 +287,7 @@ class DictationController(QObject):
     def finish_recording(self, behavior: CompletionBehavior) -> None:
         if self.state is not AppState.RECORDING:
             return
+        self._stop_preview()
         samples = self.recorder.stop()
         self.output_mute.restore()
         audio.clear_pending_dictation()
@@ -296,6 +311,7 @@ class DictationController(QObject):
     def cancel_recording(self) -> None:
         if self.state is not AppState.RECORDING:
             return
+        self._stop_preview()
         self.recorder.discard()
         self.output_mute.restore()
         self.listener.reset_toggle()
@@ -308,6 +324,65 @@ class DictationController(QObject):
     def _on_auto_stop(self) -> None:
         log.info("Auto-stopping after %d minutes", audio.MAX_RECORDING_SECONDS // 60)
         self._action_bridge.actions.emit([Action.RELEASE.value])
+
+    # -- live preview --------------------------------------------------
+
+    def _start_preview(self) -> None:
+        if not self.settings.live_preview:
+            return
+        stop = threading.Event()
+        self._preview_stop = stop
+        threading.Thread(target=self._preview_loop, args=(stop,),
+                         name="live-preview", daemon=True).start()
+
+    def _stop_preview(self) -> None:
+        stop, self._preview_stop = self._preview_stop, None
+        if stop is not None:
+            stop.set()
+            self.preview_changed.emit("")
+
+    def _preview_loop(self, stop: threading.Event) -> None:
+        """Re-transcribe the recording so far, over and over, until it ends.
+
+        Only the last :data:`PREVIEW_WINDOW_SECONDS` are read. Beyond that
+        a single pass costs more than the interval between passes, and the
+        point of the preview is to be roughly current, not complete: the
+        real transcription runs on the whole clip when recording stops.
+        """
+        delay = PREVIEW_FIRST_DELAY
+        while not stop.wait(delay):
+            if not self.recorder.is_recording:
+                return
+            model = self._model
+            if model is None or not model.is_ready:
+                return
+
+            samples = self.recorder.snapshot(PREVIEW_WINDOW_SECONDS)
+            if len(samples) < PREVIEW_MIN_AUDIO_SECONDS * audio.SAMPLE_RATE:
+                delay = PREVIEW_MIN_INTERVAL
+                continue
+
+            outcome = model.transcribe_preview(samples)
+            if outcome is None:
+                delay = PREVIEW_MIN_INTERVAL
+                continue
+            raw, inference_seconds = outcome
+            if stop.is_set():
+                return
+
+            text, _, _ = textproc.process_transcript(
+                raw,
+                language=self.settings.dictation_language,
+                corrections=self.corrections.all(),
+                strip_fillers=self.settings.remove_filler_words,
+                style=self.settings.text_style,
+            )
+            if text and self.recorder.elapsed > PREVIEW_WINDOW_SECONDS:
+                text = "… " + text
+            self.preview_changed.emit(text)
+
+            delay = max(PREVIEW_MIN_INTERVAL,
+                        inference_seconds * (1.0 - PREVIEW_DUTY) / PREVIEW_DUTY)
 
     # -- transcription worker -----------------------------------------
 

@@ -374,6 +374,9 @@ class SettingsWindow(QDialog):
              (HUDBackground.DARK.value, i18n.tr("settings_hud_background_dark")),
              (HUDBackground.LIGHT.value, i18n.tr("settings_hud_background_light"))],
         )
+        self._live_preview = self._checkbox(
+            hud, "settings_live_preview", "live_preview")
+        hud.add_caption(i18n.tr("settings_live_preview_hint"))
         hud.add_caption(i18n.tr("settings_color_hint"))
         return _page(general, hud)
 

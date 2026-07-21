@@ -83,6 +83,7 @@ def main(argv: list[str]) -> int:
     controller.transcript_ready.connect(lambda _: windows.refresh_history())
     controller.state_changed.connect(windows.on_state_changed)
     controller.level_changed.connect(windows.on_level)
+    controller.preview_changed.connect(windows.on_preview)
 
     controller.start()
 
@@ -102,6 +103,7 @@ class _Windows:
         self._settings_window = None
         self._history = None
         self._hud = None
+        self._bubble = None
         self._toasts = None
 
     # -- notifications --------------------------------------------------
@@ -162,21 +164,32 @@ class _Windows:
             self._apply_hud_settings()
         return self._hud
 
+    @property
+    def bubble(self):
+        if self._bubble is None:
+            from superdictate.ui.hud import TranscriptBubble
+
+            self._bubble = TranscriptBubble(self.hud)
+            self._apply_hud_settings()
+        return self._bubble
+
     def _apply_hud_settings(self) -> None:
-        if self._hud is None:
-            return
         settings = self._controller.settings
-        self._hud.configure(
-            size=settings.hud_size,
-            recording=settings.hud_recording_color,
-            transcribing=settings.hud_transcribing_color,
-            background=settings.hud_background_style,
-        )
+        if self._hud is not None:
+            self._hud.configure(
+                size=settings.hud_size,
+                recording=settings.hud_recording_color,
+                transcribing=settings.hud_transcribing_color,
+                background=settings.hud_background_style,
+            )
+        if self._bubble is not None:
+            self._bubble.configure(background=settings.hud_background_style)
 
     def on_state_changed(self, value: str) -> None:
         if not self._controller.settings.show_recording_waveform:
             if self._hud is not None:
                 self._hud.hide_hud()
+            self.on_preview("")
             return
         state = AppState(value)
         if state is AppState.RECORDING:
@@ -185,10 +198,20 @@ class _Windows:
             self.hud.show_transcribing()
         elif self._hud is not None:
             self._hud.hide_hud()
+        if state is not AppState.RECORDING:
+            self.on_preview("")
 
     def on_level(self, level: float) -> None:
         if self._hud is not None:
             self._hud.set_level(level)
+
+    def on_preview(self, text: str) -> None:
+        # Nothing to say yet and no bubble built yet: stay lazy.
+        if not text and self._bubble is None:
+            return
+        if not self._controller.settings.show_recording_waveform:
+            return
+        self.bubble.set_text(text)
 
 
 def _quit(app: QApplication, controller, instance: SingleInstance) -> None:

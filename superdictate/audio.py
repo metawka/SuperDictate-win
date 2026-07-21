@@ -271,6 +271,25 @@ class Recorder:
         captured = np.concatenate(chunks).astype(np.float32, copy=False)
         return resample_to_16k(captured, self._capture_rate)
 
+    def snapshot(self, max_seconds: float = 0.0) -> np.ndarray:
+        """Everything captured so far, leaving the recording running.
+
+        ``max_seconds`` trims to the most recent stretch before resampling
+        rather than after, because the anti-alias convolution is the
+        expensive part and this runs on a timer while the microphone is
+        still open.
+        """
+        with self._lock:
+            chunks = list(self._chunks)
+        if not chunks:
+            return np.zeros(0, dtype=np.float32)
+        captured = np.concatenate(chunks).astype(np.float32, copy=False)
+        if max_seconds > 0:
+            limit = int(max_seconds * self._capture_rate)
+            if captured.size > limit:
+                captured = captured[-limit:]
+        return resample_to_16k(captured, self._capture_rate)
+
     def discard(self) -> None:
         self.stop()
         clear_pending_dictation()

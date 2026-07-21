@@ -284,6 +284,176 @@ class RecordingHUD(QWidget):
         return QColor(250, 250, 252, 224), QColor(0, 0, 0, 30)
 
 
+class TranscriptBubble(QWidget):
+    """A second, smaller capsule above the first, showing partial text.
+
+    One line, always. The text is elided from the left so the words being
+    said right now stay put at the right-hand edge; growing the bubble
+    upward instead would move it under the cursor mid-sentence, and that
+    is the behaviour the capsule itself was moved away from.
+    """
+
+    HEIGHT = 30
+    PADDING = 14
+    GAP = 8
+    MIN_WIDTH = 90
+    MAX_SCREEN_FRACTION = 0.5
+
+    def __init__(self, anchor: Optional[QWidget] = None) -> None:
+        super().__init__(None)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+            | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.WindowDoesNotAcceptFocus
+            | Qt.WindowType.BypassWindowManagerHint
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        self._anchor = anchor
+        self._text = ""
+        self._opacity = 0.0
+        self.background_style = HUDBackground.SYSTEM
+
+        self._fade = QPropertyAnimation(self, b"fadeOpacity", self)
+        self._fade.finished.connect(self._fade_finished)
+        self.resize(self.MIN_WIDTH, self.HEIGHT)
+
+    def configure(self, *, background: HUDBackground) -> None:
+        self.background_style = background
+        self.update()
+
+    def set_anchor(self, anchor: QWidget) -> None:
+        self._anchor = anchor
+
+    # -- fade property ------------------------------------------------
+
+    def _get_opacity(self) -> float:
+        return self._opacity
+
+    def _set_opacity(self, value: float) -> None:
+        self._opacity = value
+        self.setWindowOpacity(value)
+
+    fadeOpacity = Property(float, _get_opacity, _set_opacity)
+
+    # -- content ------------------------------------------------------
+
+    def set_text(self, text: str) -> None:
+        text = " ".join(text.split())
+        if text == self._text:
+            return
+        self._text = text
+        if not text:
+            self.hide_bubble()
+            return
+        self._resize_to_text()
+        self._reposition()
+        if not self.isVisible():
+            self._make_click_through()
+            self.show()
+            self._animate_to(1.0, ANIMATE_IN_SECONDS)
+        self.update()
+
+    def hide_bubble(self) -> None:
+        self._text = ""
+        if not self.isVisible():
+            return
+        self._animate_to(0.0, ANIMATE_OUT_SECONDS)
+
+    def _animate_to(self, target: float, seconds: float) -> None:
+        self._fade.stop()
+        self._fade.setDuration(int(seconds * 1000))
+        self._fade.setStartValue(self._opacity)
+        self._fade.setEndValue(target)
+        self._fade.start()
+
+    def _fade_finished(self) -> None:
+        if self._opacity <= 0.01:
+            self.hide()
+
+    # -- geometry -----------------------------------------------------
+
+    def _screen(self):
+        if self._anchor is not None and self._anchor.isVisible():
+            return (QApplication.screenAt(self._anchor.geometry().center())
+                    or QApplication.primaryScreen())
+        return (QApplication.screenAt(_cursor_position())
+                or QApplication.primaryScreen())
+
+    def _resize_to_text(self) -> None:
+        area = self._screen().availableGeometry()
+        limit = int(area.width() * self.MAX_SCREEN_FRACTION)
+        # A couple of pixels of slack: sized to exactly the text advance,
+        # rounding leaves the last glyph a hair short and the whole line
+        # gets elided when it would have fitted.
+        wanted = self.fontMetrics().horizontalAdvance(self._text) + self.PADDING * 2 + 4
+        self.resize(max(self.MIN_WIDTH, min(limit, wanted)), self.HEIGHT)
+
+    def _reposition(self) -> None:
+        area = self._screen().availableGeometry()
+        if self._anchor is not None and self._anchor.isVisible():
+            capsule = self._anchor.geometry()
+            bottom = capsule.top() - self.GAP
+            centre_x = capsule.center().x()
+        else:
+            bottom = area.bottom() - BOTTOM_MARGIN
+            centre_x = area.center().x()
+        target = QPoint(centre_x - self.width() // 2, bottom - self.height())
+        target = _clamped_to_screen(target, self.width(), self.height())
+        if target != self.pos():
+            self.move(target)
+
+    def _make_click_through(self) -> None:
+        try:
+            handle = int(self.winId())
+        except Exception:
+            return
+        style = user32.GetWindowLongW(handle, GWL_EXSTYLE)
+        user32.SetWindowLongW(
+            handle, GWL_EXSTYLE,
+            style | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
+        )
+
+    # -- painting -----------------------------------------------------
+
+    def paintEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        rect = QRectF(0.5, 0.5, self.width() - 1.0, self.height() - 1.0)
+        radius = rect.height() / 2.0
+        background, border, text_color = _bubble_colors(self.background_style)
+
+        path = QPainterPath()
+        path.addRoundedRect(rect, radius, radius)
+        painter.fillPath(path, background)
+        painter.setPen(QPen(border, 1.0))
+        painter.drawPath(path)
+
+        inner = rect.adjusted(self.PADDING, 0, -self.PADDING, 0)
+        elided = self.fontMetrics().elidedText(
+            self._text, Qt.TextElideMode.ElideLeft, int(inner.width())
+        )
+        painter.setPen(text_color)
+        painter.drawText(inner,
+                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                         elided)
+        painter.end()
+
+
+def _bubble_colors(style: HUDBackground) -> tuple[QColor, QColor, QColor]:
+    dark = _system_is_dark() if style is HUDBackground.SYSTEM \
+        else style is HUDBackground.DARK
+    if dark:
+        return (QColor(28, 28, 30, 214), QColor(255, 255, 255, 38),
+                QColor(236, 236, 240))
+    return (QColor(250, 250, 252, 224), QColor(0, 0, 0, 30),
+            QColor(28, 28, 32))
+
+
 def _system_is_dark() -> bool:
     try:
         import winreg

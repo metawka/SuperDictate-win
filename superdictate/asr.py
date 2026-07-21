@@ -319,6 +319,31 @@ class SpeechModel:
             inference_seconds=inference_seconds,
         )
 
+    def transcribe_preview(self, samples: np.ndarray) -> Optional[tuple[str, float]]:
+        """A throwaway pass over a recording still in progress.
+
+        Returns the text and how long inference took, or ``None`` if the
+        model is busy with a real dictation. The lock is taken without
+        blocking on purpose: a preview that has to wait its turn is stale
+        by the time it runs, and holding up the transcription the user is
+        actually waiting for to produce one would be backwards.
+        """
+        if self._model is None or samples.size == 0:
+            return None
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            started = time.monotonic()
+            raw = self._model.recognize(samples, sample_rate=SAMPLE_RATE)
+            elapsed = time.monotonic() - started
+        except Exception as exc:
+            log.debug("Preview pass failed: %s", exc)
+            return None
+        finally:
+            self._lock.release()
+        text = raw if isinstance(raw, str) else str(raw)
+        return text.strip(), elapsed
+
 
 def delete_model_cache(quantization: Optional[str] = None) -> None:
     import shutil
