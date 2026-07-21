@@ -241,6 +241,47 @@ def _restore_capitalization(text: str, targets: set[object]) -> str:
 # -- 4. text style -------------------------------------------------------
 
 
+# The whole run of marks is captured, so "..." and "?!" are recognised as
+# one break rather than two. The trailing word is matched without its own
+# punctuation, so the stop that ends *it* is still there for the next pass
+# of the same scan.
+_SENTENCE_BREAK = re.compile(r"([.!?]+)[ \t]+([^\s.!?]+)")
+
+
+def _is_acronym(word: str) -> bool:
+    """Two or more letters, all upper case: HTTP, ГОСТ, USB-C.
+
+    The old test asked whether the first two *characters* were upper
+    case, which counts a space as upper case, so a sentence opening with
+    a one-letter word ("Я думаю") was mistaken for an acronym and kept
+    its capital in the informal style.
+    """
+    letters = [char for char in word if char.isalpha()]
+    return len(letters) >= 2 and all(char.isupper() for char in letters)
+
+
+def _lower_first_word(text: str) -> str:
+    head = text.split(maxsplit=1)[0] if text.split() else ""
+    if not head or _is_acronym(head):
+        return text
+    return text[:1].lower() + text[1:]
+
+
+def _soften_sentence_breaks(text: str) -> str:
+    """Run the sentences together the way speech does.
+
+    A full stop between two sentences becomes a comma. Anything else, a
+    question mark, an exclamation, an ellipsis, stays as it is, because
+    it carries a tone a comma cannot. Either way the next sentence loses
+    its capital. The final stop is left to the caller, which removes it.
+    """
+    def replace(match: re.Match) -> str:
+        marks = match.group(1)
+        return f"{',' if marks == '.' else marks} {_lower_first_word(match.group(2))}"
+
+    return _SENTENCE_BREAK.sub(replace, text)
+
+
 def apply_text_style(text: str, style: TextStyle) -> str:
     """Trim the model's sentence punctuation to the chosen register.
 
@@ -251,17 +292,15 @@ def apply_text_style(text: str, style: TextStyle) -> str:
         return text
 
     stripped = text.rstrip()
+    if style is TextStyle.CASUAL:
+        stripped = _soften_sentence_breaks(stripped)
     if stripped.endswith(".") and not stripped.endswith(".."):
         stripped = stripped[:-1].rstrip()
     if not stripped:
         return stripped
 
-    if style is TextStyle.INFORMAL:
-        first = stripped[0]
-        # Only undo the model's own sentence capital. An all-caps word is
-        # almost always an acronym the user actually said that way.
-        if first.isupper() and not stripped[:2].isupper():
-            stripped = first.lower() + stripped[1:]
+    if style in (TextStyle.INFORMAL, TextStyle.CASUAL):
+        stripped = _lower_first_word(stripped)
     return stripped
 
 

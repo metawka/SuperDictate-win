@@ -144,17 +144,22 @@ def _cue(segments: tuple[tuple[int, int], ...], volume: float = 0.22) -> bytes:
 class Sounds:
     """Short non-blocking cues for start / stop / error.
 
-    These used to be Windows system event sounds, which meant "recording
-    started" was whatever the user's theme assigned to Asterisk: often a
-    long chime, sometimes the same sound as an error dialog, and on a
-    silent theme nothing at all. The cues are synthesised instead, so the
-    pitch itself carries the meaning, rising to start and falling to stop,
-    and they stay short enough not to bleed into the recording.
+    Start and stop play bundled WAV files, the product's own recording
+    cue and the same cue reversed, so the two are obviously a pair and
+    obviously opposite. They used to be Windows system event sounds,
+    which meant "recording started" was whatever the user's theme
+    assigned to Asterisk: often a long chime, sometimes the same sound as
+    an error dialog, and on a silent theme nothing at all.
+
+    Error and rejected stay synthesised. They fire while the user is
+    already annoyed and want to be plain and short, not branded.
     """
 
-    _EVENTS: dict[str, tuple[tuple[int, int], ...]] = {
-        "start": ((660, 45), (990, 60)),
-        "stop": ((990, 45), (660, 60)),
+    _FILES = {
+        "start": "record-start.wav",
+        "stop": "record-stop.wav",
+    }
+    _TONES: dict[str, tuple[tuple[int, int], ...]] = {
         "error": ((330, 90), (0, 45), (330, 110)),
         "rejected": ((420, 55),),
     }
@@ -165,14 +170,22 @@ class Sounds:
     def play(self, event: str) -> None:
         if not self.enabled:
             return
-        segments = self._EVENTS.get(event)
-        if segments is None:
-            return
 
         def worker() -> None:
             try:
                 import winsound
 
+                name = self._FILES.get(event)
+                if name is not None:
+                    path = paths.resource_path("assets", name)
+                    if path.exists():
+                        winsound.PlaySound(str(path),
+                                           winsound.SND_FILENAME | winsound.SND_ASYNC)
+                        return
+                    log.warning("Cue %s is missing from the build", name)
+                segments = self._TONES.get(event)
+                if segments is None:
+                    return
                 # SND_MEMORY with SND_ASYNC needs the buffer to outlive the
                 # call; the lru_cache is what keeps it alive.
                 winsound.PlaySound(_cue(segments),

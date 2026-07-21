@@ -27,6 +27,9 @@ datas += copy_metadata("onnxruntime")
 # to travel with the build; the .ico only covers the window/taskbar icon
 # that Windows reads from the executable itself.
 datas += [("assets/D1CT.png", "assets")]
+# The recording cues are played straight off disk by winsound.
+datas += [("assets/record-start.wav", "assets"),
+          ("assets/record-stop.wav", "assets")]
 binaries = collect_dynamic_libs("onnxruntime")
 
 hiddenimports = [

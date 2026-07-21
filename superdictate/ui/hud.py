@@ -23,11 +23,19 @@ import math
 import random
 from typing import Optional
 
-from PySide6.QtCore import Property, QPoint, QPropertyAnimation, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtCore import (
+    Property,
+    QPoint,
+    QPointF,
+    QPropertyAnimation,
+    QRectF,
+    Qt,
+    QTimer,
+)
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
-from ..settings import AccentColor, HUDBackground, HUDSize
+from ..settings import AccentColor, ColorSpec, HUDBackground, HUDSize
 
 BASE_WIDTH = 64.0
 BASE_HEIGHT = 38.0
@@ -75,8 +83,8 @@ class RecordingHUD(QWidget):
         self._bar_levels = [0.15] * BAR_COUNT
 
         self.size_preset = HUDSize.STANDARD
-        self.recording_color = AccentColor.RED
-        self.transcribing_color = AccentColor.BLUE
+        self.recording_color = ColorSpec.of(AccentColor.RED)
+        self.transcribing_color = ColorSpec.of(AccentColor.BLUE)
         self.background_style = HUDBackground.SYSTEM
 
         self._frame_timer = QTimer(self)
@@ -94,8 +102,8 @@ class RecordingHUD(QWidget):
 
     # -- configuration ------------------------------------------------
 
-    def configure(self, *, size: HUDSize, recording: AccentColor,
-                  transcribing: AccentColor, background: HUDBackground) -> None:
+    def configure(self, *, size: HUDSize, recording: ColorSpec,
+                  transcribing: ColorSpec, background: HUDBackground) -> None:
         self.size_preset = size
         self.recording_color = recording
         self.transcribing_color = transcribing
@@ -232,8 +240,8 @@ class RecordingHUD(QWidget):
         painter.setPen(QPen(border, 1.0))
         painter.drawPath(path)
 
-        accent = QColor(*(self.recording_color if self._mode == "recording"
-                          else self.transcribing_color).rgb)
+        spec = (self.recording_color if self._mode == "recording"
+                else self.transcribing_color)
 
         scale = self.size_preset.scale
         bar_width = 3.0 * scale
@@ -244,7 +252,16 @@ class RecordingHUD(QWidget):
         center_y = self.height() / 2.0
 
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(accent)
+        if spec.is_gradient:
+            # Across the whole run of bars rather than per bar, so the
+            # ramp reads as one object instead of five striped ones.
+            ramp = QLinearGradient(QPointF(left, 0.0),
+                                   QPointF(left + total_width, 0.0))
+            ramp.setColorAt(0.0, QColor(spec.start))
+            ramp.setColorAt(1.0, QColor(spec.end))
+            painter.setBrush(ramp)
+        else:
+            painter.setBrush(QColor(spec.start))
         for index, level in enumerate(self._bar_levels):
             height = max(bar_width, max_height * level)
             bar = QRectF(

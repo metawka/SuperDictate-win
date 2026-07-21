@@ -25,7 +25,7 @@ _STRINGS: dict[str, tuple[str, str]] = {
 
     # -- tray --------------------------------------------------------
     "tray_open_panel": ("Панель управления", "Control panel"),
-    "tray_settings": ("Настройки…", "Settings…"),
+    "tray_settings": ("Настройки", "Settings"),
     "tray_history": ("История", "History"),
     "tray_start": ("Начать диктовку", "Start dictation"),
     "tray_stop": ("Остановить", "Stop"),
@@ -54,9 +54,8 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "stats_total_time": ("Наговорено", "Dictated"),
     "stats_unit_today": ("диктовок", "dictations"),
     "stats_unit_words_today": ("слов", "words"),
-    "stats_unit_hours": ("ч:мин аудио", "h:min of audio"),
-    "stats_unit_minutes": ("мин:сек аудио", "min:sec of audio"),
-    "stats_unit_seconds": ("секунд аудио", "seconds of audio"),
+    "stats_unit_hours": ("времени", "of audio"),
+    "stats_unit_minutes": ("времени", "of audio"),
     "stats_last_14_days": ("Последние 14 дней", "Last 14 days"),
     "stats_activity": ("Активность", "Activity"),
 
@@ -72,7 +71,7 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_section_capture": ("Запись", "Capture"),
     "settings_primary_hotkey": ("Основное сочетание", "Primary shortcut"),
     "settings_history_hotkey": ("Быстрая история", "Quick history"),
-    "settings_record": ("Записать…", "Record…"),
+    "settings_record": ("Записать", "Record"),
     "settings_trigger_mode": ("Режим", "Mode"),
     "settings_trigger_hold": ("Удерживать", "Press and hold"),
     "settings_trigger_toggle": ("Нажать и нажать снова", "Press to toggle"),
@@ -83,11 +82,16 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_text_style_formal": ("Формальный", "Formal"),
     "settings_text_style_standard": ("Стандартный", "Standard"),
     "settings_text_style_informal": ("Неформальный", "Informal"),
+    "settings_text_style_casual": ("Разговорный", "Casual"),
     "settings_text_style_hint": (
         "Формальный: как распознала модель. Стандартный: без точки в конце. "
-        "Неформальный: без точки и с маленькой буквы.",
+        "Неформальный: без точки и с маленькой буквы. Разговорный: то же, "
+        "плюс точки внутри заменяются запятыми, а всё после них идёт с "
+        "маленькой буквы.",
         "Formal: exactly as recognised. Standard: no full stop at the end. "
-        "Informal: no full stop and no leading capital.",
+        "Informal: no full stop and no leading capital. Casual: the same, "
+        "plus inner full stops become commas and nothing after them is "
+        "capitalised.",
     ),
     "settings_enter_delay": ("Задержка перед Enter, мс", "Delay before Enter, ms"),
     "settings_paste_suffix": ("После вставки", "After insertion"),
@@ -98,8 +102,8 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_interface_language": ("Язык интерфейса", "Interface language"),
     "settings_input_device": ("Устройство ввода", "Input device"),
     "settings_device_default": ("Системное по умолчанию", "System default"),
-    "settings_remove_fillers": ("Убирать слова-паразиты (um, uh, …)",
-                                "Remove filler words (um, uh, …)"),
+    "settings_remove_fillers": ("Убирать слова-паразиты (um, uh)",
+                                "Remove filler words (um, uh)"),
     "settings_mute": ("Отключать звук системы во время записи",
                       "Mute system output while recording"),
     "settings_stop_on_silence": (
@@ -125,14 +129,15 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_hud_background_system": ("Системный", "System"),
     "settings_hud_background_dark": ("Тёмный", "Dark"),
     "settings_hud_background_light": ("Светлый", "Light"),
-    "color_red": ("Красный", "Red"),
-    "color_orange": ("Оранжевый", "Orange"),
-    "color_pink": ("Розовый", "Pink"),
-    "color_purple": ("Фиолетовый", "Purple"),
-    "color_blue": ("Синий", "Blue"),
-    "color_cyan": ("Голубой", "Cyan"),
-    "color_green": ("Зелёный", "Green"),
-    "color_white": ("Белый", "White"),
+    "settings_status_ready_color": ("Цвет готовности", "Ready color"),
+    "settings_color_gradient": ("Градиент", "Gradient"),
+    "settings_color_pick": ("Выбор цвета", "Pick a color"),
+    "settings_color_hint": (
+        "Нажмите на цвет, чтобы выбрать любой другой. С градиентом "
+        "капсула заливается переходом между двумя цветами.",
+        "Click a colour to pick any other. With a gradient the capsule is "
+        "filled with a ramp between the two.",
+    ),
     "settings_history_limit": ("Быстрая история", "Quick history"),
     "settings_history_off": ("Выключена", "Off"),
     "settings_history_last": ("Последние {n}", "Last {n}"),

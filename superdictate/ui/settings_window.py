@@ -20,9 +20,12 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
+    QColorDialog,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -47,6 +50,7 @@ from ..keynames import hotkey_name
 from ..settings import (
     DICTATION_LANGUAGES,
     AccentColor,
+    ColorSpec,
     CompletionBehavior,
     Correction,
     HUDBackground,
@@ -55,9 +59,84 @@ from ..settings import (
     Settings,
     TextStyle,
 )
+from ..updater import PeriodicChecker
 from . import icons
 from .recorder import ShortcutRecorderDialog
-from .theme import palette, stylesheet
+from .rows import PRIMARY_ROLE, SECONDARY_ROLE, CorrectionRowDelegate
+from .theme import Palette, palette, stylesheet
+
+
+class ColorField(QWidget):
+    """A colour, or two of them for a gradient.
+
+    The eight presets that used to fill a combo box are still one click
+    away inside the picker's own palette, but "розовый" is now whichever
+    pink the user actually means rather than the one shipped in the enum.
+    """
+
+    def __init__(self, spec: ColorSpec, on_change, palette: Palette,
+                 parent=None) -> None:
+        super().__init__(parent)
+        self._spec = spec
+        self._on_change = on_change
+        self._palette = palette
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+
+        self._start_button = QPushButton()
+        self._start_button.clicked.connect(lambda: self._pick(is_end=False))
+        self._end_button = QPushButton()
+        self._end_button.clicked.connect(lambda: self._pick(is_end=True))
+
+        self._gradient = QCheckBox(i18n.tr("settings_color_gradient"))
+        self._gradient.setChecked(spec.is_gradient)
+        self._gradient.toggled.connect(self._toggle_gradient)
+
+        row.addWidget(self._start_button, 1)
+        row.addWidget(self._gradient)
+        row.addWidget(self._end_button, 1)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        self._start_button.setText(self._spec.start.upper())
+        self._start_button.setIcon(icons.swatch(self._spec.start, 13))
+        gradient = self._spec.is_gradient
+        self._end_button.setVisible(gradient)
+        if gradient:
+            self._end_button.setText(str(self._spec.end).upper())
+            self._end_button.setIcon(icons.swatch(str(self._spec.end), 13))
+        self._on_change(self._spec.to_json())
+
+    def _toggle_gradient(self, enabled: bool) -> None:
+        if enabled:
+            # A gradient needs somewhere to go, and a second stop equal to
+            # the first would just look like a broken picker.
+            self._spec = ColorSpec(self._spec.start,
+                                   self._spec.end or _shifted(self._spec.start))
+        else:
+            self._spec = ColorSpec(self._spec.start)
+        self._refresh()
+
+    def _pick(self, *, is_end: bool) -> None:
+        current = QColor(self._spec.end if is_end else self._spec.start)
+        chosen = QColorDialog.getColor(current, self,
+                                       i18n.tr("settings_color_pick"))
+        if not chosen.isValid():
+            return
+        value = chosen.name()
+        self._spec = (ColorSpec(self._spec.start, value) if is_end
+                      else ColorSpec(value, self._spec.end))
+        self._refresh()
+
+
+def _shifted(color: str) -> str:
+    """A second stop far enough from the first to read as a gradient."""
+    hue = QColor(color)
+    return QColor.fromHsv((hue.hue() + 60) % 360 if hue.hue() >= 0 else 300,
+                          max(80, hue.saturation()),
+                          min(255, hue.value() + 20)).name()
 
 
 class Section(QWidget):
@@ -169,7 +248,7 @@ class SettingsWindow(QDialog):
         save = buttons.button(QDialogButtonBox.StandardButton.Save)
         save.setText(i18n.tr("settings_save_restart"))
         save.setObjectName("Primary")
-        save.setIcon(icons.icon("check", "#ffffff", 16))
+        save.setIcon(icons.icon("check", self._palette.accent_text, 16))
         save.setIconSize(icons.icon_size(16))
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(
             i18n.tr("settings_cancel"))
@@ -201,6 +280,7 @@ class SettingsWindow(QDialog):
         self._enter_delay = QSpinBox()
         self._enter_delay.setRange(0, 500)
         self._enter_delay.setSingleStep(10)
+        self._enter_delay.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         # No suffix: the row label already carries the unit, and a hard-coded
         # English one sat badly next to a Russian label.
         self._enter_delay.setValue(int(self._draft["enter_delay_milliseconds"]))
@@ -225,7 +305,8 @@ class SettingsWindow(QDialog):
             recognition, "settings_text_style", "text_style",
             [(TextStyle.FORMAL.value, i18n.tr("settings_text_style_formal")),
              (TextStyle.STANDARD.value, i18n.tr("settings_text_style_standard")),
-             (TextStyle.INFORMAL.value, i18n.tr("settings_text_style_informal"))],
+             (TextStyle.INFORMAL.value, i18n.tr("settings_text_style_informal")),
+             (TextStyle.CASUAL.value, i18n.tr("settings_text_style_casual"))],
         )
         recognition.add_caption(i18n.tr("settings_text_style_hint"))
         self._fillers = self._checkbox(
@@ -243,6 +324,9 @@ class SettingsWindow(QDialog):
         self._silence_seconds.setRange(1.0, 10.0)
         self._silence_seconds.setSingleStep(0.5)
         self._silence_seconds.setDecimals(1)
+        # Same reason as the stylesheet rule: Qt's native spin arrows do not
+        # follow the theme and looked stuck on.
+        self._silence_seconds.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self._silence_seconds.setValue(float(self._draft.get("silence_stop_seconds", 2.5)))
         self._silence_seconds.valueChanged.connect(
             lambda value: self._draft.update(silence_stop_seconds=value))
@@ -270,6 +354,8 @@ class SettingsWindow(QDialog):
         )
         self._waveform = self._checkbox(
             general, "settings_waveform", "show_recording_waveform")
+        self._color_row(general, "settings_status_ready_color",
+                        "status_ready_color", AccentColor.GREEN)
 
         hud = Section("HUD")
         self._hud_size = self._combo(
@@ -278,20 +364,17 @@ class SettingsWindow(QDialog):
              (HUDSize.STANDARD.value, i18n.tr("settings_hud_size_standard")),
              (HUDSize.LARGE.value, i18n.tr("settings_hud_size_large"))],
         )
-        colors = [(color.value, i18n.tr(f"color_{color.value}"))
-                  for color in AccentColor]
-        self._hud_recording = self._combo(
-            hud, "settings_hud_recording_color", "hud_recording_color", colors)
-        self._hud_transcribing = self._combo(
-            hud, "settings_hud_transcribing_color", "hud_transcribing_color", colors)
+        self._color_row(hud, "settings_hud_recording_color",
+                        "hud_recording_color", AccentColor.RED)
+        self._color_row(hud, "settings_hud_transcribing_color",
+                        "hud_transcribing_color", AccentColor.BLUE)
         self._hud_background = self._combo(
             hud, "settings_hud_background", "hud_background_style",
             [(HUDBackground.SYSTEM.value, i18n.tr("settings_hud_background_system")),
              (HUDBackground.DARK.value, i18n.tr("settings_hud_background_dark")),
              (HUDBackground.LIGHT.value, i18n.tr("settings_hud_background_light"))],
         )
-        self._colorize_combo(self._hud_recording)
-        self._colorize_combo(self._hud_transcribing)
+        hud.add_caption(i18n.tr("settings_color_hint"))
         return _page(general, hud)
 
     def _build_corrections_tab(self) -> QWidget:
@@ -299,7 +382,12 @@ class SettingsWindow(QDialog):
         section.add_caption(i18n.tr("corrections_note"))
 
         self._corrections_list = QListWidget()
-        self._corrections_list.setIconSize(icons.icon_size(14))
+        self._corrections_list.setItemDelegate(
+            CorrectionRowDelegate(self._palette, self._corrections_list))
+        self._corrections_list.setMouseTracking(True)
+        self._corrections_list.setUniformItemSizes(True)
+        self._corrections_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._corrections_list.setMinimumHeight(220)
         for correction in self._corrections.all():
             self._add_correction_item(correction)
@@ -333,6 +421,15 @@ class SettingsWindow(QDialog):
         self._updates = self._checkbox(
             system, "settings_check_updates", "check_for_updates")
 
+        # Moved off the control panel, which is a status window, not a
+        # place to run errands from.
+        self._update_button = QPushButton(i18n.tr("panel_check_updates"))
+        self._update_button.setIcon(icons.icon("download", self._palette.text_muted, 15))
+        self._update_button.clicked.connect(self._check_updates)
+        self._update_label = self._muted_label("")
+        system.add_row(None, self._update_button)
+        system.add_row(None, self._update_label)
+
         engine = Section(i18n.tr("panel_model"))
         self._quantization = self._combo(
             engine, "settings_model_quality", "model_quantization",
@@ -350,6 +447,34 @@ class SettingsWindow(QDialog):
         engine.add_row("ONNX Runtime", self._muted_label(", ".join(providers) or "-"))
         return _page(system, engine)
 
+    # -- updates ------------------------------------------------------
+
+    def _check_updates(self) -> None:
+        self._update_label.setText(i18n.tr("update_checking"))
+        self._update_button.setEnabled(False)
+        # The check is a blocking HTTPS request; letting the label paint
+        # first is the difference between "Проверка" and a frozen dialog.
+        QTimer.singleShot(0, self._run_update_check)
+
+    def _run_update_check(self) -> None:
+        try:
+            info = PeriodicChecker().maybe_check(force=True)
+        finally:
+            self._update_button.setEnabled(True)
+
+        if info is None:
+            self._update_label.setText(i18n.tr("update_failed"))
+        elif not info.is_newer:
+            self._update_label.setText(i18n.tr("update_none"))
+        elif not info.has_windows_asset:
+            self._update_label.setText(
+                f"{i18n.tr('update_available', version=info.version)}, "
+                f"{i18n.tr('update_no_windows_build')}"
+            )
+        else:
+            self._update_label.setText(
+                i18n.tr("update_available", version=info.version))
+
     # -- widget helpers -----------------------------------------------
 
     def _muted_label(self, text: str) -> QLabel:
@@ -358,15 +483,14 @@ class SettingsWindow(QDialog):
         label.setWordWrap(True)
         return label
 
-    def _colorize_combo(self, combo: QComboBox) -> None:
-        """Show the accent colours as swatches, not just their names."""
-        for index in range(combo.count()):
-            value = combo.itemData(index)
-            try:
-                color = AccentColor(value)
-            except ValueError:
-                continue
-            combo.setItemIcon(index, icons.swatch(color.hex, 13))
+    def _color_row(self, section: Section, label_key: str, draft_key: str,
+                   fallback: AccentColor) -> ColorField:
+        spec = ColorSpec.parse(self._draft.get(draft_key), ColorSpec.of(fallback))
+        field = ColorField(spec,
+                           lambda value, k=draft_key: self._draft.update({k: value}),
+                           self._palette)
+        section.add_row(i18n.tr(label_key), field)
+        return field
 
     def _shortcut_row(self, section: Section, label_key: str,
                       draft_key: str) -> QPushButton:
@@ -413,9 +537,11 @@ class SettingsWindow(QDialog):
         return box
 
     def _add_correction_item(self, correction: Correction) -> None:
-        item = QListWidgetItem(f"{correction.source}  →  {correction.replacement}")
-        item.setIcon(icons.icon("replace", self._palette.text_faint, 14))
+        item = QListWidgetItem()
+        item.setData(PRIMARY_ROLE, correction.source)
+        item.setData(SECONDARY_ROLE, correction.replacement)
         item.setData(Qt.ItemDataRole.UserRole, correction)
+        item.setToolTip(f"{correction.source} → {correction.replacement}")
         self._corrections_list.addItem(item)
 
     def _add_correction(self) -> None:

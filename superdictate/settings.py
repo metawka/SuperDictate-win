@@ -38,12 +38,13 @@ class TextStyle(str, Enum):
     """How much punctuation the inserted text keeps.
 
     The model always returns a fully punctuated sentence. Chat and code
-    comments rarely want that, so two looser styles trim it back.
+    comments rarely want that, so the looser styles trim it back.
     """
 
     FORMAL = "formal"          # exactly what the model produced
     STANDARD = "standard"      # no full stop at the end
     INFORMAL = "informal"      # no full stop, and no leading capital
+    CASUAL = "casual"          # the above, plus no full stops inside either
 
 
 class PasteSuffix(str, Enum):
@@ -100,6 +101,61 @@ class AccentColor(str, Enum):
         return "#%02x%02x%02x" % self.rgb
 
 
+@dataclass(frozen=True)
+class ColorSpec:
+    """A capsule colour: one colour, or two for a gradient.
+
+    Stored as a string so the settings file stays readable and older
+    files keep working: a preset is its own name (``"red"``), a picked
+    colour is ``"#ff4536"``, and a gradient is the two joined by a pipe.
+    """
+
+    start: str
+    end: Optional[str] = None
+
+    @property
+    def is_gradient(self) -> bool:
+        return bool(self.end)
+
+    @property
+    def rgb(self) -> tuple[int, int, int]:
+        raw = self.start.lstrip("#")
+        return tuple(int(raw[i:i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+
+    def to_json(self) -> str:
+        return f"{self.start}|{self.end}" if self.end else self.start
+
+    @classmethod
+    def parse(cls, raw: Any, fallback: "ColorSpec") -> "ColorSpec":
+        if not isinstance(raw, str) or not raw.strip():
+            return fallback
+        parts = [cls._resolve(part) for part in raw.split("|", 1)]
+        if parts[0] is None:
+            return fallback
+        end = parts[1] if len(parts) > 1 else None
+        return cls(parts[0], end)
+
+    @staticmethod
+    def _resolve(raw: str) -> Optional[str]:
+        """A preset name or a #rrggbb literal, normalised to a literal."""
+        value = raw.strip().lower()
+        try:
+            return AccentColor(value).hex
+        except ValueError:
+            pass
+        if len(value) == 7 and value.startswith("#"):
+            try:
+                int(value[1:], 16)
+            except ValueError:
+                return None
+            return value
+        return None
+
+    @classmethod
+    def of(cls, color: AccentColor) -> "ColorSpec":
+        return cls(color.hex)
+
+
 # Matches the macOS DictationLanguage enum: the 25-language Parakeet TDT v3
 # decoder, narrowed to the languages the macOS UI exposes.
 DICTATION_LANGUAGES: list[tuple[str, str]] = [
@@ -151,6 +207,7 @@ _DEFAULTS: dict[str, Any] = {
     "show_recording_waveform": True,
     "hud_recording_color": AccentColor.RED.value,
     "hud_transcribing_color": AccentColor.BLUE.value,
+    "status_ready_color": AccentColor.GREEN.value,
     "hud_background_style": HUDBackground.SYSTEM.value,
     "hud_size": HUDSize.STANDARD.value,
     "mute_while_recording": False,
@@ -277,12 +334,19 @@ class Settings:
         return bool(self._get("show_recording_waveform"))
 
     @property
-    def hud_recording_color(self) -> AccentColor:
-        return _enum_or(AccentColor, self._get("hud_recording_color"), AccentColor.RED)
+    def hud_recording_color(self) -> ColorSpec:
+        return ColorSpec.parse(self._get("hud_recording_color"),
+                               ColorSpec.of(AccentColor.RED))
 
     @property
-    def hud_transcribing_color(self) -> AccentColor:
-        return _enum_or(AccentColor, self._get("hud_transcribing_color"), AccentColor.BLUE)
+    def hud_transcribing_color(self) -> ColorSpec:
+        return ColorSpec.parse(self._get("hud_transcribing_color"),
+                               ColorSpec.of(AccentColor.BLUE))
+
+    @property
+    def status_ready_color(self) -> ColorSpec:
+        return ColorSpec.parse(self._get("status_ready_color"),
+                               ColorSpec.of(AccentColor.GREEN))
 
     @property
     def hud_background_style(self) -> HUDBackground:

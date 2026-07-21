@@ -45,8 +45,10 @@ DARK = Palette(
     text="#f2f2f7",
     text_muted="#a9adb8",
     text_faint="#787d89",
-    accent="#0a84ff",
-    accent_text="#ffffff",
+    # The product mark's pink. It is far too light to carry white text, so
+    # the accent's foreground is near-black in both themes.
+    accent="#f4b8f7",
+    accent_text="#241028",
     control="#2b2d34",
     control_hover="#343740",
     control_border="#3a3d47",
@@ -65,8 +67,8 @@ LIGHT = Palette(
     text="#14161a",
     text_muted="#5b6070",
     text_faint="#8d92a1",
-    accent="#0a84ff",
-    accent_text="#ffffff",
+    accent="#e79bec",
+    accent_text="#241028",
     control="#ffffff",
     control_hover="#eef0f4",
     control_border="#d3d6de",
@@ -77,6 +79,15 @@ LIGHT = Palette(
     danger="#d70015",
     warning="#b25000",
 )
+
+
+def _lighten(hex_color: str, amount: float) -> str:
+    """Move a colour toward white, for hover states."""
+    raw = hex_color.lstrip("#")
+    channels = (int(raw[index:index + 2], 16) for index in (0, 2, 4))
+    return "#" + "".join(
+        f"{int(value + (255 - value) * amount):02x}" for value in channels
+    )
 
 
 def system_is_dark() -> bool:
@@ -151,7 +162,7 @@ def stylesheet(p: Palette | None = None) -> str:
         color: {p.accent_text};
         font-weight: 600;
     }}
-    QPushButton#Primary:hover {{ background: #3d9bff; }}
+    QPushButton#Primary:hover {{ background: {_lighten(p.accent, 0.35)}; }}
 
     QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QListWidget, QPlainTextEdit {{
         background: {p.field};
@@ -163,6 +174,13 @@ def stylesheet(p: Palette | None = None) -> str:
         selection-color: {p.accent_text};
     }}
     QComboBox::drop-down {{ border: none; width: 22px; }}
+    /* No spin arrows anywhere. Qt draws them as two stacked native
+       half-buttons that ignore the rest of this stylesheet and look
+       glued on; the value is typed or scrolled instead. */
+    QSpinBox::up-button, QSpinBox::down-button,
+    QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+        width: 0; height: 0; border: none;
+    }}
     QComboBox QAbstractItemView {{
         background: {p.card};
         border: 1px solid {p.card_border};
@@ -170,8 +188,15 @@ def stylesheet(p: Palette | None = None) -> str:
         selection-color: {p.accent_text};
         outline: none;
     }}
-    QListWidget::item {{ padding: 6px 4px; border-radius: 6px; }}
-    QListWidget::item:selected {{ background: {p.accent}; color: {p.accent_text}; }}
+    /* The rows are drawn by a delegate, so the view itself is just a
+       transparent surface: a field border around a list of cards read as
+       a box inside a box. */
+    QListWidget {{
+        background: transparent;
+        border: none;
+        padding: 0;
+        outline: none;
+    }}
 
     QCheckBox, QRadioButton {{ background: transparent; spacing: 8px; }}
     QCheckBox::indicator, QRadioButton::indicator {{ width: 17px; height: 17px; }}

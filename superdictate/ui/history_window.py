@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from .. import i18n, inject
 from . import icons
+from .rows import META_ROLE, PRIMARY_ROLE, HistoryRowDelegate
 from .theme import palette, stylesheet
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -57,7 +58,13 @@ class HistoryWindow(QDialog):
         layout.setSpacing(10)
 
         self._list = QListWidget()
-        self._list.setIconSize(icons.icon_size(14))
+        self._list.setItemDelegate(HistoryRowDelegate(self._palette, self._list))
+        self._list.setMouseTracking(True)          # so rows light up on hover
+        self._list.setUniformItemSizes(True)
+        self._list.setSpacing(0)
+        # A transcript can be a paragraph long. Eliding keeps every row the
+        # same shape; a horizontal scrollbar under the list did not.
+        self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._list.itemActivated.connect(lambda _: self._insert_selected())
         layout.addWidget(self._list)
 
@@ -75,7 +82,7 @@ class HistoryWindow(QDialog):
         )
         for label_key, icon_name, handler, primary in buttons:
             button = QPushButton(i18n.tr(label_key))
-            colour = "#ffffff" if primary else self._palette.text_muted
+            colour = self._palette.accent_text if primary else self._palette.text_muted
             button.setIcon(icons.icon(icon_name, colour, 15))
             button.setIconSize(icons.icon_size(15))
             if primary:
@@ -105,17 +112,18 @@ class HistoryWindow(QDialog):
         self._list.clear()
         entries = self._controller.history.entries(limit or None)
         if not entries:
-            item = QListWidgetItem(i18n.tr("history_empty"))
+            item = QListWidgetItem()
+            item.setData(PRIMARY_ROLE, i18n.tr("history_empty"))
             item.setFlags(Qt.ItemFlag.NoItemFlags)
             self._list.addItem(item)
             return
         for index, entry in enumerate(entries):
             stamp = datetime.fromtimestamp(entry.created_at).strftime("%d.%m %H:%M")
-            preview = " ".join(entry.text.split())
-            if len(preview) > 120:
-                preview = preview[:117] + "…"
-            item = QListWidgetItem(f"{stamp}   {preview}")
-            item.setIcon(icons.icon("mic", self._palette.text_faint, 14))
+            item = QListWidgetItem()
+            item.setData(META_ROLE, stamp)
+            # The delegate elides; a pre-truncated string would just be
+            # elided twice and lose two more characters.
+            item.setData(PRIMARY_ROLE, " ".join(entry.text.split()))
             item.setData(Qt.ItemDataRole.UserRole, index)
             item.setToolTip(entry.text)
             self._list.addItem(item)

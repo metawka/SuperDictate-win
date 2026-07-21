@@ -198,6 +198,27 @@ def test_text_style() -> None:
            apply_text_style("HTTP работает.", TextStyle.INFORMAL), "HTTP работает")
     _check("style: empty text is safe",
            apply_text_style("", TextStyle.INFORMAL), "")
+    # A one-letter opening word is not an acronym. The old two-character
+    # test counted the following space as upper case and kept the capital.
+    _check("style: one-letter word still lowercases",
+           apply_text_style("Я думаю.", TextStyle.INFORMAL), "я думаю")
+
+
+def test_casual_style() -> None:
+    _check("casual: inner stops become commas",
+           apply_text_style("Первое. Второе. Третье.", TextStyle.CASUAL),
+           "первое, второе, третье")
+    # The scan must not swallow the stop that ends the word it just read.
+    _check("casual: every stop is converted, not every other one",
+           apply_text_style("А. Б. В. Г.", TextStyle.CASUAL), "а, б, в, г")
+    _check("casual: a question mark keeps its tone but loses the capital",
+           apply_text_style("Как дела? Всё хорошо.", TextStyle.CASUAL),
+           "как дела? всё хорошо")
+    _check("casual: an ellipsis is not a sentence break",
+           apply_text_style("Ну... ладно.", TextStyle.CASUAL), "ну... ладно")
+    _check("casual: acronyms survive the pass",
+           apply_text_style("Это HTTP. HTTP работает.", TextStyle.CASUAL),
+           "это HTTP, HTTP работает")
 
 
 def test_pipeline_order() -> None:
@@ -263,6 +284,7 @@ _TESTS = [
     test_corrections,
     test_filler_removal,
     test_text_style,
+    test_casual_style,
     test_pipeline_order,
     test_settings_round_trip,
     test_hotkey_json_guards,

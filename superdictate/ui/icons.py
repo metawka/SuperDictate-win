@@ -130,5 +130,27 @@ def swatch(color: str, size: int = 14) -> QIcon:
     return QIcon(result)
 
 
+@lru_cache(maxsize=64)
+def gradient_swatch(start: str, end: str, size: int = 14) -> QIcon:
+    """A chip split across two colours, for a gradient setting."""
+    from PySide6.QtCore import QPointF, QRectF
+    from PySide6.QtGui import QColor, QLinearGradient
+
+    result = QPixmap(size, size)
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    gradient = QLinearGradient(QPointF(0, 0), QPointF(size, size))
+    gradient.setColorAt(0.0, QColor(start))
+    gradient.setColorAt(1.0, QColor(end))
+    painter.setBrush(gradient)
+    painter.setPen(QColor(0, 0, 0, 70))
+    inset = 0.5
+    painter.drawRoundedRect(
+        QRectF(inset, inset, size - 2 * inset, size - 2 * inset), 4, 4)
+    painter.end()
+    return QIcon(result)
+
+
 def icon_size(size: int = 18) -> QSize:
     return QSize(size, size)

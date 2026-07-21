@@ -313,12 +313,15 @@ class StatsPanel(QWidget):
 
 
 def _format_duration(seconds: float) -> tuple[str, str]:
-    """Value and a unit caption that matches what the value actually is."""
+    """Always a clock reading, so the caption never has to name the unit.
+
+    Under a minute it is "0:45" rather than "45": the caption below the
+    tile just says "времени", and a bare number under it would be read
+    as a count of dictations like the tiles either side of it.
+    """
     seconds = int(seconds)
     hours, remainder = divmod(seconds, 3600)
     minutes, secs = divmod(remainder, 60)
     if hours:
         return f"{hours}:{minutes:02d}", i18n.tr("stats_unit_hours")
-    if minutes:
-        return f"{minutes}:{secs:02d}", i18n.tr("stats_unit_minutes")
-    return str(secs), i18n.tr("stats_unit_seconds")
+    return f"{minutes}:{secs:02d}", i18n.tr("stats_unit_minutes")

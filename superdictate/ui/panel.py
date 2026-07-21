@@ -20,8 +20,8 @@ matching macOS where closing the panel leaves the background agent alive.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import QPointF, Qt, QTimer
+from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
@@ -37,7 +37,6 @@ from PySide6.QtWidgets import (
 from .. import asr, i18n
 from ..app import AppState
 from ..keynames import hotkey_name
-from ..updater import PeriodicChecker
 from ..version import VERSION
 from . import icons
 from .stats import StatsPanel
@@ -60,10 +59,12 @@ class StatusDot(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._color = QColor("#8e8e93")
+        self._end: QColor | None = None
         self.setFixedSize(14, 14)
 
-    def set_color(self, color: str) -> None:
+    def set_color(self, color: str, end: str | None = None) -> None:
         self._color = QColor(color)
+        self._end = QColor(end) if end else None
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802 (Qt naming)
@@ -74,7 +75,13 @@ class StatusDot(QWidget):
         halo.setAlpha(60)
         painter.setBrush(halo)
         painter.drawEllipse(0, 0, 14, 14)
-        painter.setBrush(self._color)
+        if self._end is not None:
+            fill = QLinearGradient(QPointF(4, 4), QPointF(10, 10))
+            fill.setColorAt(0.0, self._color)
+            fill.setColorAt(1.0, self._end)
+            painter.setBrush(fill)
+        else:
+            painter.setBrush(self._color)
         painter.drawEllipse(4, 4, 6, 6)
         painter.end()
 
@@ -97,7 +104,6 @@ class ControlPanel(QMainWindow):
         self._controller = controller
         self._open_settings = open_settings
         self._open_history = open_history
-        self._update_checker = PeriodicChecker()
         self._palette = palette()
 
         self.setWindowTitle(f"{i18n.tr('app_name')} {VERSION}")
@@ -127,6 +133,7 @@ class ControlPanel(QMainWindow):
         layout.setContentsMargins(18, 18, 18, 12)
         layout.setSpacing(12)
 
+        layout.addWidget(self._build_status_card())
         layout.addWidget(self._build_service_card())
         layout.addWidget(_card_title(i18n.tr("panel_shortcuts")))
         layout.addWidget(self._build_shortcuts_card())
@@ -140,11 +147,6 @@ class ControlPanel(QMainWindow):
         footer_layout.setContentsMargins(18, 10, 18, 14)
         footer_layout.setSpacing(6)
         footer_layout.addLayout(self._build_actions())
-
-        self._update_label = QLabel("")
-        self._update_label.setObjectName("Caption")
-        self._update_label.setWordWrap(True)
-        footer_layout.addWidget(self._update_label)
         root_layout.addWidget(footer)
 
         controller.state_changed.connect(lambda _: self.refresh())
@@ -161,11 +163,17 @@ class ControlPanel(QMainWindow):
 
     # -- layout -------------------------------------------------------
 
-    def _build_service_card(self) -> QWidget:
+    def _build_status_card(self) -> QWidget:
+        """State and the restart button, on their own.
+
+        These two used to sit on top of the model/compute/microphone
+        grid in one tall card. They answer a different question, "is it
+        running, and can I kick it", so they get their own strip.
+        """
         card = _card()
         outer = QVBoxLayout(card)
-        outer.setContentsMargins(16, 14, 16, 14)
-        outer.setSpacing(12)
+        outer.setContentsMargins(16, 12, 16, 12)
+        outer.setSpacing(10)
 
         head = QHBoxLayout()
         head.setSpacing(10)
@@ -187,6 +195,13 @@ class ControlPanel(QMainWindow):
         self._progress.setRange(0, 100)
         self._progress.setVisible(False)
         outer.addWidget(self._progress)
+        return card
+
+    def _build_service_card(self) -> QWidget:
+        card = _card()
+        outer = QVBoxLayout(card)
+        outer.setContentsMargins(16, 14, 16, 14)
+        outer.setSpacing(12)
 
         grid = QGridLayout()
         grid.setHorizontalSpacing(14)
@@ -249,7 +264,8 @@ class ControlPanel(QMainWindow):
 
         self._settings_button = QPushButton(i18n.tr("tray_settings"))
         self._settings_button.setObjectName("Primary")
-        self._settings_button.setIcon(icons.icon("settings", "#ffffff", 16))
+        self._settings_button.setIcon(
+            icons.icon("settings", self._palette.accent_text, 16))
         self._settings_button.setIconSize(icons.icon_size(16))
         self._settings_button.clicked.connect(lambda: self._open_settings())
 
@@ -259,26 +275,26 @@ class ControlPanel(QMainWindow):
         self._history_button.setIconSize(icons.icon_size(16))
         self._history_button.clicked.connect(lambda: self._open_history())
 
-        self._update_button = QPushButton(i18n.tr("panel_check_updates"))
-        self._update_button.setIcon(
-            icons.icon("download", self._palette.text_muted, 16))
-        self._update_button.setIconSize(icons.icon_size(16))
-        self._update_button.clicked.connect(self._check_updates)
-
+        # No update button here: checking for updates is a once-in-a-while
+        # errand, and it sat next to the two things this window is for.
+        # It lives on the Advanced tab of the settings now.
         buttons.addWidget(self._settings_button)
         buttons.addWidget(self._history_button)
         buttons.addStretch(1)
-        buttons.addWidget(self._update_button)
         return buttons
 
     # -- refresh ------------------------------------------------------
 
     def refresh(self) -> None:
         state = self._controller.state
-        self._status_text.setText(i18n.tr(_STATE_LABELS.get(state, "status_starting")))
-        self._status_dot.set_color(self._state_color(state))
-
         settings = self._controller.settings
+        self._status_text.setText(i18n.tr(_STATE_LABELS.get(state, "status_starting")))
+        if state is AppState.READY:
+            ready = settings.status_ready_color
+            self._status_dot.set_color(ready.start, ready.end)
+        else:
+            self._status_dot.set_color(self._state_color(state))
+
         for attribute, label in self._shortcut_labels.items():
             label.setText(hotkey_name(getattr(settings, attribute), i18n.language()))
 
@@ -302,7 +318,6 @@ class ControlPanel(QMainWindow):
     def _state_color(self, state: AppState) -> str:
         p = self._palette
         return {
-            AppState.READY: p.ok,
             AppState.RECORDING: p.danger,
             AppState.TRANSCRIBING: p.busy,
             AppState.FAILED: p.danger,
@@ -323,33 +338,6 @@ class ControlPanel(QMainWindow):
         else:
             self._progress.setRange(0, 100)
             self._progress.setVisible(False)
-
-    # -- updates ------------------------------------------------------
-
-    def _check_updates(self) -> None:
-        self._update_label.setText(i18n.tr("update_checking"))
-        self._update_button.setEnabled(False)
-        QTimer.singleShot(0, self._run_update_check)
-
-    def _run_update_check(self) -> None:
-        try:
-            info = self._update_checker.maybe_check(force=True)
-        finally:
-            self._update_button.setEnabled(True)
-
-        if info is None:
-            self._update_label.setText(i18n.tr("update_failed"))
-            return
-        if not info.is_newer:
-            self._update_label.setText(i18n.tr("update_none"))
-            return
-        if not info.has_windows_asset:
-            self._update_label.setText(
-                f"{i18n.tr('update_available', version=info.version)}, "
-                f"{i18n.tr('update_no_windows_build')}"
-            )
-            return
-        self._update_label.setText(i18n.tr("update_available", version=info.version))
 
     # -- window behaviour ---------------------------------------------
 
