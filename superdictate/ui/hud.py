@@ -61,6 +61,10 @@ BAR_COUNT = 5
 # nothing, and how often the cursor is checked against the capsule.
 RESULT_HOLD_MS = 3600
 HOVER_POLL_MS = 120
+# The outcome glyph — a clock for a clip that was too short, a crossed-out
+# microphone for speech that came back empty. It used to be amber, which
+# read as an error; neither case is one, and white matches the accent.
+RESULT_COLOR = "#ffffff"
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 # The HWND argument must be declared, or ctypes passes it as a c_int.
@@ -125,7 +129,7 @@ class RecordingHUD(QWidget):
         self._fade.finished.connect(self._fade_finished)
 
         self._result_icon = ""
-        self._result_color = "#ff9f0a"
+        self._result_color = RESULT_COLOR
         self._hovered = False
         self._hover_timer = QTimer(self)
         self._hover_timer.setInterval(HOVER_POLL_MS)

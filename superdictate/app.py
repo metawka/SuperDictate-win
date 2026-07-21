@@ -93,6 +93,7 @@ class DictationController(QObject):
         self.corrections = Corrections()
         self.sounds = system.Sounds(settings.play_feedback_sounds)
         self.output_mute = system.OutputMute()
+        self.media_pause = system.MediaPause()
 
         self._state = AppState.STARTING
         self._state_lock = threading.Lock()
@@ -167,7 +168,7 @@ class DictationController(QObject):
             if self.recorder.is_recording:
                 self.recorder.discard()
         finally:
-            self.output_mute.restore()
+            self._restore_playback()
         self.listener.stop()
         self._jobs.put(None)
         if self._worker is not None:
@@ -267,10 +268,14 @@ class DictationController(QObject):
         if not self._can_start_recording():
             self.sounds.play("rejected")
             return
+        # Pausing first: it decides by listening to the output device, which
+        # muting would silence and the start cue would fill with our own tone.
+        if self.settings.pause_media_while_recording:
+            self.media_pause.pause()
         if self.settings.mute_while_recording:
             self.output_mute.mute()
         if not self.recorder.start(self.settings.input_device):
-            self.output_mute.restore()
+            self._restore_playback()
             message = self._microphone_error_message(self.recorder.last_error or "")
             self.last_error = message
             self.sounds.play("error")
@@ -296,7 +301,7 @@ class DictationController(QObject):
             return
         self._stop_preview(clear=False)
         samples = self.recorder.stop()
-        self.output_mute.restore()
+        self._restore_playback()
         audio.clear_pending_dictation()
         self.sounds.play("stop")
 
@@ -320,10 +325,21 @@ class DictationController(QObject):
             return
         self._stop_preview()
         self.recorder.discard()
-        self.output_mute.restore()
+        self._restore_playback()
         self.listener.reset_toggle()
         self._set_state(AppState.READY)
         log.info("Recording cancelled")
+
+    def _restore_playback(self) -> None:
+        """Undo both interventions, in the order they were applied.
+
+        Unmuting first means the video the media key resumes is audible from
+        its first frame. Both calls are no-ops unless they did something,
+        so this is safe to call on every path out of a recording — including
+        the ones where the settings were off.
+        """
+        self.output_mute.restore()
+        self.media_pause.resume()
 
     def _on_level(self, level: float) -> None:
         self.level_changed.emit(level)

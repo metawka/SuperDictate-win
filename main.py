@@ -22,7 +22,8 @@ from superdictate import i18n, paths
 from superdictate.app import AppState, DictationController
 from superdictate.logging_setup import configure, get as get_logger
 from superdictate.settings import Settings
-from superdictate.system import SingleInstance, broadcast_show_panel
+from superdictate.system import (SingleInstance, broadcast_show_panel,
+                                 set_app_user_model_id)
 from superdictate.ui.history_window import HistoryWindow
 from superdictate.ui.panel import ControlPanel
 from superdictate.ui.settings_window import SettingsWindow
@@ -41,6 +42,10 @@ def main(argv: list[str]) -> int:
     log = configure(verbose="--verbose" in argv)
     log.info("Dictation %s starting", VERSION)
 
+    # Before QApplication: the identity has to be in place before the first
+    # window is created, or the taskbar has already decided what to show.
+    set_app_user_model_id()
+
     instance = SingleInstance()
     if instance.already_running:
         log.info("Another instance is running; asking it to show its panel")
@@ -50,7 +55,7 @@ def main(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setApplicationName("Dictation")
     # No display name: Qt would append " - Dictation" to every window title,
-    # and the control panel already says "Dictation 1.8.2".
+    # and the control panel already says "Dictation 2.0.0".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -140,12 +145,14 @@ class _Windows:
         self.show_warning(message)
 
     def show_dictation_failure(self, icon_name: str, message: str) -> None:
+        from superdictate.ui.hud import RESULT_COLOR
+
         if not self._controller.settings.show_recording_waveform:
             self.show_warning(message)
             return
         self._failure_message = message
         self.on_preview("")
-        self.hud.show_result(icon_name, "#ff9f0a")
+        self.hud.show_result(icon_name, RESULT_COLOR)
 
     # -- panel / settings / history ------------------------------------
 

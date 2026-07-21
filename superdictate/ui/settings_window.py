@@ -405,6 +405,9 @@ class SettingsWindow(QDialog):
         capture.add_row(i18n.tr("settings_silence_seconds"), self._silence_seconds)
 
         self._mute = self._checkbox(capture, "settings_mute", "mute_while_recording")
+        self._pause_media = self._checkbox(
+            capture, "settings_pause_media", "pause_media_while_recording",
+            hint=i18n.tr("settings_pause_media_hint"))
         self._sounds = self._checkbox(capture, "settings_sounds", "play_feedback_sounds")
 
         history = Section(i18n.tr("settings_tab_dictation"))

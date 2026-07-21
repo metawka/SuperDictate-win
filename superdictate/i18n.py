@@ -122,6 +122,16 @@ _STRINGS: dict[str, tuple[str, str]] = {
     ),
     "settings_mute": ("Отключать звук системы во время записи",
                       "Mute system output while recording"),
+    "settings_pause_media": ("Ставить воспроизведение на паузу",
+                             "Pause playback while recording"),
+    "settings_pause_media_hint": (
+        "В начале записи нажимается клавиша «пауза», в конце — ещё раз, "
+        "так что видео или музыка продолжаются с того же места. Если в "
+        "момент начала записи ничего не играло, нажатия не будет.",
+        "The play/pause media key is pressed when the recording starts and "
+        "again when it ends, so a video or a track continues where it left "
+        "off. If nothing was playing, nothing is pressed.",
+    ),
     "settings_stop_on_silence": (
         "Завершать запись автоматически после паузы",
         "Finish the recording automatically after a pause",

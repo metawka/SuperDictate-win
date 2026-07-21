@@ -212,6 +212,7 @@ _DEFAULTS: dict[str, Any] = {
     "hud_background_style": HUDBackground.SYSTEM.value,
     "hud_size": HUDSize.STANDARD.value,
     "mute_while_recording": False,
+    "pause_media_while_recording": False,
     "play_feedback_sounds": True,
     "input_device": "",  # empty = system default
     "check_for_updates": True,
@@ -365,6 +366,10 @@ class Settings:
     @property
     def mute_while_recording(self) -> bool:
         return bool(self._get("mute_while_recording"))
+
+    @property
+    def pause_media_while_recording(self) -> bool:
+        return bool(self._get("pause_media_while_recording"))
 
     @property
     def play_feedback_sounds(self) -> bool:

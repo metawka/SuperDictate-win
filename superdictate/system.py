@@ -23,6 +23,7 @@ import math
 import struct
 import sys
 import threading
+import time
 import wave
 from functools import lru_cache
 from typing import Optional
@@ -39,6 +40,25 @@ kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 # -- system output mute --------------------------------------------------
 
 
+def _speaker_interface(interface_type):
+    """Activate a COM interface on the default playback device.
+
+    ``AudioUtilities.GetSpeakers()`` used to hand back the raw IMMDevice;
+    since pycaw 2024 it hands back an ``AudioDevice`` wrapper, which has no
+    ``Activate``. Calling it regardless is how muting quietly stopped
+    working: the AttributeError was caught, logged and swallowed.
+    """
+    from ctypes import POINTER, cast
+
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities
+
+    device = AudioUtilities.GetSpeakers()
+    device = getattr(device, "_dev", device)
+    interface = device.Activate(interface_type._iid_, CLSCTX_ALL, None)
+    return cast(interface, POINTER(interface_type))
+
+
 class OutputMute:
     """Mutes the default playback device for the duration of a recording.
 
@@ -53,14 +73,9 @@ class OutputMute:
         self._lock = threading.Lock()
 
     def _endpoint(self):
-        from ctypes import POINTER, cast
+        from pycaw.pycaw import IAudioEndpointVolume
 
-        from comtypes import CLSCTX_ALL
-        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-
-        speakers = AudioUtilities.GetSpeakers()
-        interface = speakers.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        return cast(interface, POINTER(IAudioEndpointVolume))
+        return _speaker_interface(IAudioEndpointVolume)
 
     def mute(self) -> None:
         with self._lock:
@@ -93,6 +108,88 @@ class OutputMute:
                 self._endpoint().SetMute(0, None)
             except Exception as exc:
                 log.warning("Could not restore system output: %s", exc)
+
+
+# -- media pause ---------------------------------------------------------
+
+
+VK_MEDIA_PLAY_PAUSE = 0xB3
+KEYEVENTF_KEYUP = 0x0002
+# Anything quieter than this is background hiss from a session that is open
+# but not playing; anything louder is something the user is listening to.
+_AUDIBLE_PEAK = 0.004
+# One reading can land in a gap between words or beats, so a few are taken.
+# The whole probe runs before the recorder opens, so it is kept to 30 ms:
+# any longer and the delay would eat the start of the first word.
+_PEAK_SAMPLES = 3
+_PEAK_INTERVAL = 0.015
+
+
+class MediaPause:
+    """Presses the play/pause media key around a recording.
+
+    Muting silences the speakers but the video keeps running, so the
+    dictation costs you the part you were watching. The media key is what a
+    keyboard would send, so whatever owns playback — a player, a browser
+    tab — handles it the way it handles the real thing.
+
+    The key is a toggle, which makes an unconditional press dangerous: with
+    nothing playing it would *start* something. So playback is confirmed
+    first by metering the output device, and the key is only pressed again
+    afterwards if this class was the one that paused it.
+    """
+
+    def __init__(self) -> None:
+        self._paused = False
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _something_is_playing() -> bool:
+        from pycaw.api.endpointvolume import IAudioMeterInformation
+
+        meter = _speaker_interface(IAudioMeterInformation)
+        for index in range(_PEAK_SAMPLES):
+            if float(meter.GetPeakValue()) > _AUDIBLE_PEAK:
+                return True
+            if index + 1 < _PEAK_SAMPLES:
+                time.sleep(_PEAK_INTERVAL)
+        return False
+
+    @staticmethod
+    def _tap() -> None:
+        user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, 0, 0)
+        user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_KEYUP, 0)
+
+    def pause(self) -> None:
+        """Pause playback if there is any.
+
+        Runs before the output is muted and before the start cue: a muted
+        device meters as silence, and our own cue would meter as music.
+        """
+        with self._lock:
+            if self._paused:
+                return
+            try:
+                import comtypes
+
+                comtypes.CoInitialize()
+                if not self._something_is_playing():
+                    return
+                self._tap()
+                self._paused = True
+            except Exception as exc:
+                log.warning("Could not pause playback: %s", exc)
+                self._paused = False
+
+    def resume(self) -> None:
+        with self._lock:
+            if not self._paused:
+                return
+            self._paused = False
+            try:
+                self._tap()
+            except Exception as exc:
+                log.warning("Could not resume playback: %s", exc)
 
 
 # -- feedback sounds -----------------------------------------------------
@@ -292,7 +389,25 @@ class SingleInstance:
             self._handle = None
 
 
-SHOW_PANEL_MESSAGE = "D1CT.ShowControlPanel"
+SHOW_PANEL_MESSAGE = "Dictation.ShowControlPanel"
+
+# The identity Windows groups taskbar buttons and pinned shortcuts by. The
+# installer stamps the same string onto the shortcuts it creates.
+APP_USER_MODEL_ID = "metawka.Dictation"
+
+
+def set_app_user_model_id(app_id: str = APP_USER_MODEL_ID) -> None:
+    """Claim an explicit taskbar identity, before any window exists.
+
+    Without one, Windows derives an identity from the executable path and
+    keeps the icon it cached for it — which is why the tray, drawn by this
+    process from the current artwork, updated after a rebrand while the
+    taskbar button kept showing the old picture.
+    """
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+    except Exception as exc:  # pragma: no cover - shell32 is always there
+        log.warning("Could not set the app user model id: %s", exc)
 
 
 def register_show_message() -> int:

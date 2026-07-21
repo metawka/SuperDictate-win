@@ -1,4 +1,4 @@
-"""Rotating file log plus stderr, mirroring ``~/Library/Logs/SuperDictate*`` (D1CT.log here)."""
+"""Rotating file log plus stderr, mirroring ``~/Library/Logs/SuperDictate*``."""
 
 from __future__ import annotations
 

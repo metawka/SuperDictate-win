@@ -24,5 +24,5 @@
 | [pycaw](https://github.com/AndreMiras/pycaw) | MIT | приглушение системного звука |
 
 Веса модели не входят в состав установщика: они скачиваются при первом
-запуске в `%LOCALAPPDATA%\D1CT\Models` и остаются под лицензией
+запуске в `%LOCALAPPDATA%\Dictation\Models` и остаются под лицензией
 CC-BY-4.0 NVIDIA.

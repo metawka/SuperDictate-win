@@ -8,7 +8,7 @@ tray from login.
 
 The speech model is NOT bundled. It is ~640 MB, it is licensed
 separately, and the app already downloads it on first run with a progress
-bar into %LOCALAPPDATA%\\D1CT\\Models.
+bar into %LOCALAPPDATA%\\Dictation\\Models.
 """
 
 from PyInstaller.utils.hooks import (

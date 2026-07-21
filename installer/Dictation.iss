@@ -8,10 +8,13 @@
 ;   & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\Dictation.iss
 
 #define AppName        "Dictation"
-#define AppVersion     "1.8.2"
+#define AppVersion     "2.0.0"
 #define AppPublisher   "metawka"
 #define AppURL         "https://github.com/metawka/SuperDictate-win"
 #define AppExeName     "Dictation.exe"
+; Must match superdictate.system.APP_USER_MODEL_ID, or the taskbar treats a
+; pinned shortcut and the running window as two different applications.
+#define AppUserModelID "metawka.Dictation"
 
 [Setup]
 AppId={{7B4B2E23-9F3E-4E7B-9E4B-2C1F0C3A5D21}
@@ -73,10 +76,11 @@ Type: files; Name: "{group}\D1CT.lnk"
 Type: files; Name: "{autodesktop}\D1CT.lnk"
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
+    AppUserModelID: "{#AppUserModelID}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; \
-    Tasks: desktopicon
+    AppUserModelID: "{#AppUserModelID}"; Tasks: desktopicon
 
 [Registry]
 ; --minimized so an autostarted copy goes straight to the tray instead of
@@ -103,6 +107,23 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM {#AppExeName} /F"; \
     Flags: runhidden; RunOnceId: "StopDictation"
 
 [Code]
+const
+  SHCNE_ASSOCCHANGED = $08000000;
+  SHCNF_IDLIST       = $0000;
+
+procedure SHChangeNotify(EventId: LongInt; Flags: Cardinal;
+                         Item1, Item2: LongInt);
+  external 'SHChangeNotify@shell32.dll stdcall';
+
+// Explorer caches the icon it has seen for an executable, so after the
+// artwork changed the taskbar and the Start menu kept drawing the old one
+// until something told the shell to look again.
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, 0, 0);
+end;
+
 // Settings, history and the 640 MB model cache live outside the install
 // directory. Leaving them behind by default means a reinstall does not
 // re-download the model; the user is asked, so a real uninstall can be
@@ -114,7 +135,7 @@ var
 begin
   if CurUninstallStep = usPostUninstall then
   begin
-    DataDir := ExpandConstant('{localappdata}\D1CT');
+    DataDir := ExpandConstant('{localappdata}\Dictation');
     if DirExists(DataDir) then
       if MsgBox('Удалить настройки, историю и загруженную модель распознавания (~640 МБ)?'#13#10 +
                 'Remove settings, history and the downloaded speech model (~640 MB)?',
