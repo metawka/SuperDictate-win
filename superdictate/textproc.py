@@ -18,6 +18,7 @@ already Unicode-aware and ``[^\\W\\d_]`` is exactly "a Unicode letter".
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Iterable, Sequence
 
 from .settings import Correction, TextStyle
@@ -131,25 +132,114 @@ def apply_corrections(
 
 # -- 3. filler words -----------------------------------------------------
 
-# Non-word interjections only. "like" / "you know" are excluded because
-# they have valid non-filler meanings. Trailing-letter repeats are allowed
-# because real fillers stretch out ("ummm"); "er"/"erm" deliberately have
-# no quantifier so the real word "err" survives.
-_FILLER_PATTERNS = ["um+", "uh+", "ah+", "er", "erm", "hm+"]
-_FILLER_REGEX = re.compile(
-    r"(?<![^\W_]|['\-])(?:" + "|".join(_FILLER_PATTERNS) + r")(?![^\W_]|['\-])",
-    re.IGNORECASE | re.UNICODE,
+# The words offered in the settings, with the pattern each one matches.
+# A pattern of ``None`` means "the word itself", which is also what a word
+# the user types gets: predictable, and it cannot quietly eat a longer
+# word that starts the same way.
+#
+# Trailing-letter repeats are spelled out where a real filler stretches
+# ("ummm", "эээ"). "er"/"erm" deliberately have no quantifier, so the real
+# word "err" survives.
+#
+# Which of these start out enabled is decided in ``settings``: an "эм" can
+# only ever be a hesitation, but "это", "вот" and "значит" are ordinary
+# words that happen to also be used as filler, and a dictation app that
+# deletes them uninvited is worse than one that leaves them in.
+PRESET_FILLERS: tuple[tuple[str, str | None], ...] = (
+    # Russian hesitation sounds.
+    ("э", "э+"),
+    ("эм", "э+м+"),
+    ("ээ", "э{2,}"),
+    ("м", "м+"),
+    ("мм", "м{2,}"),
+    ("ам", "а+м+"),
+    ("аа", "а{2,}"),
+    ("ну", "ну+"),
+    # Russian verbal tics: phrases that are almost never anything else.
+    ("как бы", None),
+    ("типа", None),
+    ("короче", None),
+    ("это самое", None),
+    ("так сказать", None),
+    ("в общем", None),
+    ("в принципе", None),
+    ("собственно", None),
+    ("допустим", None),
+    ("слушай", None),
+    ("понимаешь", None),
+    ("знаешь", None),
+    # Russian words that are filler only sometimes; off by default.
+    ("это", None),
+    ("вот", None),
+    ("значит", None),
+    ("просто", None),
+    ("реально", None),
+    ("походу", None),
+    ("блин", None),
+    # English.
+    ("um", "um+"),
+    ("uh", "uh+"),
+    ("ah", "ah+"),
+    ("er", "er"),
+    ("erm", "erm"),
+    ("hm", "hm+"),
+    ("like", None),
+    ("you know", None),
+    ("i mean", None),
+    ("actually", None),
+    ("basically", None),
 )
+
+_PRESET_PATTERNS = dict(PRESET_FILLERS)
 
 _SENTENCE_TERMINATORS = ".!?"
 _BOUNDARY_WRAPPERS = "\"'“”‘’([{"
 _ORPHAN_SEPARATORS = ",.;:!?"
 
 
-def remove_filler_words(text: str) -> tuple[str, int]:
+def _pattern_for(word: str) -> str:
+    """The regex a single entry contributes.
+
+    Spaces become "one or more spaces" so a two-word tic still matches when
+    the model puts a wider gap in, and a word the settings do not know is
+    escaped whole: whatever the user typed, and nothing else.
+    """
+    known = _PRESET_PATTERNS.get(word.strip().lower())
+    if known is not None:
+        return known
+    return r"\s+".join(re.escape(part) for part in word.split())
+
+
+@lru_cache(maxsize=8)
+def _filler_regex(words: tuple[str, ...]) -> re.Pattern[str] | None:
+    """Cached because it is rebuilt for every dictation from a settings list.
+
+    Longest first, so "это самое" is matched as one tic rather than as
+    "это" followed by a stray "самое".
+    """
+    ordered = sorted({word.strip() for word in words if word.strip()},
+                     key=len, reverse=True)
+    if not ordered:
+        return None
+    return re.compile(
+        r"(?<![^\W_]|['\-])(?:" + "|".join(_pattern_for(w) for w in ordered)
+        + r")(?![^\W_]|['\-])",
+        re.IGNORECASE | re.UNICODE,
+    )
+
+
+def remove_filler_words(text: str,
+                        words: Sequence[str] | None = None) -> tuple[str, int]:
     if not text:
         return text, 0
-    matches = list(_FILLER_REGEX.finditer(text))
+    if words is None:
+        from .settings import DEFAULT_FILLER_WORDS
+
+        words = DEFAULT_FILLER_WORDS
+    regex = _filler_regex(tuple(words))
+    if regex is None:
+        return text, 0
+    matches = list(regex.finditer(text))
     if not matches:
         return text, 0
 
@@ -447,6 +537,7 @@ def process_transcript(
     language: str = "auto",
     corrections: Sequence[Correction] = (),
     strip_fillers: bool = False,
+    filler_words: Sequence[str] | None = None,
     digits: bool = False,
     style: TextStyle = TextStyle.FORMAL,
 ) -> tuple[str, int, int]:
@@ -455,7 +546,7 @@ def process_transcript(
     text, applied = apply_corrections(text, corrections)
     removed = 0
     if strip_fillers:
-        text, removed = remove_filler_words(text)
+        text, removed = remove_filler_words(text, filler_words)
     if digits:
         # After corrections, so a replacement rule can still spell a
         # number out in words and have it converted like any other.

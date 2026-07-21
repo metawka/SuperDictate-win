@@ -28,6 +28,7 @@ from superdictate.ui.history_window import HistoryWindow
 from superdictate.ui.panel import ControlPanel
 from superdictate.ui.settings_window import SettingsWindow
 from superdictate.ui.theme import stylesheet
+from superdictate.ui.updates import UpdateWatcher, notification_text
 from superdictate.ui.tray import Tray, build_icon
 from superdictate.version import VERSION
 
@@ -55,7 +56,7 @@ def main(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setApplicationName("Dictation")
     # No display name: Qt would append " - Dictation" to every window title,
-    # and the control panel already says "Dictation 2.1.0".
+    # and the control panel already says "Dictation 2.2.0".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -81,6 +82,8 @@ def main(argv: list[str]) -> int:
     tray.show()
 
     windows.tray = tray
+    # The only notification that has somewhere to go when clicked.
+    tray.messageClicked.connect(windows.open_update_page)
     controller.history_toggle_requested.connect(windows.toggle_history)
     # Anything wrong with the machine goes to the Windows notification
     # centre, where it stays until it is read: "no microphone" is worth
@@ -94,6 +97,10 @@ def main(argv: list[str]) -> int:
     controller.preview_changed.connect(windows.on_preview)
 
     controller.start()
+
+    watcher = UpdateWatcher(settings, app)
+    watcher.update_found.connect(windows.announce_update)
+    watcher.start()
 
     if "--minimized" not in argv:
         windows.show_panel()
@@ -115,6 +122,7 @@ class _Windows:
         self._toasts = None
         self.tray = None
         self._failure_message = ""
+        self._update_url = ""
 
     # -- notifications --------------------------------------------------
 
@@ -143,6 +151,32 @@ class _Windows:
         # No notification centre to talk to: better an on-screen card than
         # a message that never appears at all.
         self.show_warning(message)
+
+    def announce_update(self, version: str, page_url: str) -> None:
+        """A notification, not a browser window.
+
+        The check runs on its own schedule, so whatever the user is doing
+        when it finishes has nothing to do with updates. A page that opens
+        by itself in the middle of that is an interruption; a notification
+        waits in the centre until it is clicked, and clicking it is what
+        opens the page.
+        """
+        from PySide6.QtWidgets import QSystemTrayIcon
+
+        self._update_url = page_url
+        if self.tray is None or not QSystemTrayIcon.supportsMessages():
+            return
+        title, body = notification_text(version)
+        self.tray.showMessage(title, body,
+                              QSystemTrayIcon.MessageIcon.Information, 12000)
+
+    def open_update_page(self) -> None:
+        if not self._update_url:
+            return
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        QDesktopServices.openUrl(QUrl(self._update_url))
 
     def show_dictation_failure(self, icon_name: str, message: str) -> None:
         from superdictate.ui.hud import RESULT_COLOR

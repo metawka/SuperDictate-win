@@ -94,6 +94,10 @@ class DictationController(QObject):
         self.sounds = system.Sounds(settings.play_feedback_sounds)
         self.output_mute = system.OutputMute()
         self.media_pause = system.MediaPause()
+        # The mute now trails the start cue by a thread, so it has to be
+        # possible to tell it that its recording is over. See _mute_after_cue.
+        self._playback_lock = threading.Lock()
+        self._recording_session = 0
 
         self._state = AppState.STARTING
         self._state_lock = threading.Lock()
@@ -277,8 +281,6 @@ class DictationController(QObject):
         # muting would silence and the start cue would fill with our own tone.
         if self.settings.pause_media_while_recording:
             self.media_pause.pause()
-        if self.settings.mute_while_recording:
-            self.output_mute.mute()
         if not self.recorder.start(self.settings.input_device):
             self._restore_playback()
             message = self._microphone_error_message(self.recorder.last_error or "")
@@ -288,7 +290,23 @@ class DictationController(QObject):
             self.listener.reset_toggle()
             return
         self._set_state(AppState.RECORDING)
-        self.sounds.play("start")
+        # The mute waits for the start cue to finish. Muting first silenced
+        # the cue along with everything else, so the one sound that says
+        # "it is listening now" was the one nobody could hear.
+        #
+        # The recorder is already running by then, so the cue itself lands
+        # in the first fraction of a second of the clip. That is the right
+        # way round: a beep at the front of a recording costs nothing, and
+        # holding the microphone shut until the cue ends would clip the
+        # first word of anybody who starts talking straight away.
+        if self.settings.mute_while_recording:
+            with self._playback_lock:
+                self._recording_session += 1
+                session = self._recording_session
+            self.sounds.play("start",
+                             then=lambda: self._mute_after_cue(session))
+        else:
+            self.sounds.play("start")
         self._start_preview()
 
     @staticmethod
@@ -335,6 +353,22 @@ class DictationController(QObject):
         self._set_state(AppState.READY)
         log.info("Recording cancelled")
 
+    def _mute_after_cue(self, session: int) -> None:
+        """Mute, unless the recording this belongs to is already over.
+
+        Runs on the cue's thread, a fraction of a second after the
+        recording started, which is long enough for a very short dictation
+        to have finished and restored the sound already. Muting then would
+        leave the machine silent with nothing recording. The session number
+        and the lock make the two orders equivalent: either the mute
+        happens and the restore undoes it, or the restore happens and the
+        mute is skipped.
+        """
+        with self._playback_lock:
+            if session != self._recording_session:
+                return
+            self.output_mute.mute()
+
     def _restore_playback(self) -> None:
         """Undo both interventions, in the order they were applied.
 
@@ -343,7 +377,9 @@ class DictationController(QObject):
         so this is safe to call on every path out of a recording — including
         the ones where the settings were off.
         """
-        self.output_mute.restore()
+        with self._playback_lock:
+            self._recording_session += 1
+            self.output_mute.restore()
         self.media_pause.resume()
 
     def _on_level(self, level: float) -> None:
@@ -411,6 +447,7 @@ class DictationController(QObject):
                 language=self.settings.dictation_language,
                 corrections=self.corrections.all(),
                 strip_fillers=self.settings.remove_filler_words,
+                filler_words=self.settings.filler_words,
                 digits=self.settings.numbers_as_digits,
                 style=self.settings.text_style,
             )
@@ -450,6 +487,7 @@ class DictationController(QObject):
             language=self.settings.dictation_language,
             corrections=self.corrections.all(),
             strip_fillers=self.settings.remove_filler_words,
+            filler_words=self.settings.filler_words,
             digits=self.settings.numbers_as_digits,
             style=self.settings.text_style,
         )

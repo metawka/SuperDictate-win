@@ -165,6 +165,19 @@ def stylesheet(p: Palette | None = None) -> str:
         font-weight: 600;
     }}
     QPushButton#Primary:hover {{ background: {p.accent_hover}; }}
+    /* A button that reads as part of the sentence next to it: the
+       disclosure arrow beside a setting, the small remove control on a
+       word. A framed button there would compete with the setting it
+       belongs to. */
+    QPushButton#Link {{
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        padding: 3px 6px;
+        color: {p.text_muted};
+    }}
+    QPushButton#Link:hover {{ background: {p.control_hover}; color: {p.text}; }}
+    QPushButton#Link:disabled {{ color: {p.text_faint}; }}
 
     QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QListWidget, QPlainTextEdit {{
         background: {p.field};

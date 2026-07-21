@@ -118,8 +118,23 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_interface_language": ("Язык интерфейса", "Interface language"),
     "settings_input_device": ("Устройство ввода", "Input device"),
     "settings_device_default": ("Системное по умолчанию", "System default"),
-    "settings_remove_fillers": ("Убирать слова-паразиты (um, uh)",
-                                "Remove filler words (um, uh)"),
+    "settings_remove_fillers": ("Удалить слова-паразиты",
+                                "Remove filler words"),
+    "settings_fillers_list": ("Список слов", "Word list"),
+    "settings_fillers_list_count": ("Список слов ({count})",
+                                    "Word list ({count})"),
+    "settings_fillers_note": (
+        "Отмеченные слова удаляются из расшифровки. По умолчанию отмечены "
+        "только звуки запинки: «это», «вот», «короче» и подобные — обычные "
+        "слова, и удалять их без спроса значит менять сказанное. Своё слово "
+        "или фраза добавляются в поле ниже.",
+        "Ticked words are removed from the transcript. Only hesitation "
+        "sounds are ticked by default: \"like\", \"actually\" and the rest "
+        "are ordinary words, and removing those uninvited would change what "
+        "was said. Add your own word or phrase in the field below.",
+    ),
+    "settings_fillers_add": ("Своё слово или фраза",
+                             "Your own word or phrase"),
     "settings_numbers_as_digits": ("Числа цифрами",
                                    "Numbers as digits"),
     "settings_numbers_as_digits_hint": (
@@ -229,6 +244,10 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "update_checking": ("Проверка…", "Checking…"),
     "update_failed": ("Не удалось проверить обновления", "Update check failed"),
     "update_open": ("Открыть страницу релиза", "Open release page"),
+    "update_notification": (
+        "Доступна версия {version}. Нажмите, чтобы открыть страницу релиза.",
+        "Version {version} is available. Click to open the release page.",
+    ),
     "update_opened": (
         "Доступна версия {version}, страница релиза открыта в браузере",
         "Version {version} available, the release page is open in the browser",

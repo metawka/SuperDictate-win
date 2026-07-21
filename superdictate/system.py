@@ -27,7 +27,7 @@ import threading
 import time
 import wave
 from functools import lru_cache
-from typing import Optional
+from typing import Callable, Optional
 
 from . import paths
 from .logging_setup import get as get_logger
@@ -326,20 +326,40 @@ class Sounds:
     def __init__(self, enabled: bool = True) -> None:
         self.enabled = enabled
 
-    def play(self, event: str) -> None:
+    def play(self, event: str, then: Optional[Callable[[], None]] = None) -> None:
+        """Play a cue, and run ``then`` once it has finished sounding.
+
+        ``then`` exists for one caller: muting the system output at the
+        start of a recording. The mute silences the speakers, so a cue
+        played into it is a cue nobody hears; waiting for the last sample
+        is the difference between a start sound and no start sound at all.
+
+        It runs on the cue's own thread, never on the caller's, and it runs
+        even when sounds are switched off or the cue could not be played —
+        whatever it is meant to do still has to happen.
+        """
         if not self.enabled:
+            if then is not None:
+                threading.Thread(target=then, name="after-cue",
+                                 daemon=True).start()
             return
+
+        blocking = then is not None
 
         def worker() -> None:
             try:
                 import winsound
 
+                # SND_ASYNC returns as soon as playback starts; without it
+                # PlaySound returns when the sound is over, which is what
+                # a follow-up action has to wait for.
+                mode = 0 if blocking else winsound.SND_ASYNC
                 name = self._FILES.get(event)
                 if name is not None:
                     path = paths.resource_path("assets", name)
                     if path.exists():
                         winsound.PlaySound(str(path),
-                                           winsound.SND_FILENAME | winsound.SND_ASYNC)
+                                           winsound.SND_FILENAME | mode)
                         return
                     log.warning("Cue %s is missing from the build", name)
                 segments = self._TONES.get(event)
@@ -347,10 +367,12 @@ class Sounds:
                     return
                 # SND_MEMORY with SND_ASYNC needs the buffer to outlive the
                 # call; the lru_cache is what keeps it alive.
-                winsound.PlaySound(_cue(segments),
-                                   winsound.SND_MEMORY | winsound.SND_ASYNC)
+                winsound.PlaySound(_cue(segments), winsound.SND_MEMORY | mode)
             except Exception as exc:
                 log.debug("Could not play the %s cue: %s", event, exc)
+            finally:
+                if then is not None:
+                    then()
 
         threading.Thread(target=worker, name="sound", daemon=True).start()
 

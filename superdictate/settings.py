@@ -188,6 +188,17 @@ class Correction:
         return {"source": self.source, "replacement": self.replacement}
 
 
+# Which of the offered filler words are removed until the user says
+# otherwise. Hesitation sounds only: they cannot be anything but
+# hesitation. Everything else on the list — "это", "вот", "короче", "like"
+# — is an ordinary word doing filler duty, and deleting those uninvited
+# would quietly change what somebody said.
+DEFAULT_FILLER_WORDS: tuple[str, ...] = (
+    "э", "эм", "ээ", "м", "мм", "ам", "аа",
+    "um", "uh", "ah", "er", "erm", "hm",
+)
+
+
 _DEFAULTS: dict[str, Any] = {
     "hotkey": DEFAULT_HOTKEY.to_json(),
     "history_hotkey": DEFAULT_HISTORY_HOTKEY.to_json(),
@@ -210,6 +221,7 @@ _DEFAULTS: dict[str, Any] = {
     "check_for_updates": True,
     "dictation_language": "auto",
     "remove_filler_words": False,
+    "filler_words": list(DEFAULT_FILLER_WORDS),
     "numbers_as_digits": True,
     "stop_on_silence": False,
     "silence_stop_seconds": 2.5,
@@ -374,6 +386,24 @@ class Settings:
     @property
     def remove_filler_words(self) -> bool:
         return bool(self._get("remove_filler_words"))
+
+    @property
+    def filler_words(self) -> tuple[str, ...]:
+        """The words the removal pass acts on, in the order they were stored.
+
+        An empty list is a legitimate answer — somebody who unticks every
+        word gets nothing removed — so it is not replaced by the defaults;
+        only a value of the wrong shape is.
+        """
+        raw = self._get("filler_words")
+        if not isinstance(raw, list):
+            return DEFAULT_FILLER_WORDS
+        seen: list[str] = []
+        for entry in raw:
+            word = str(entry).strip()
+            if word and word.lower() not in {w.lower() for w in seen}:
+                seen.append(word)
+        return tuple(seen)
 
     @property
     def numbers_as_digits(self) -> bool:

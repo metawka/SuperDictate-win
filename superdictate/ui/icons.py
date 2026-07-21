@@ -54,6 +54,12 @@ _PATHS: dict[str, str] = {
     "type": "M4 7V5h16v2M12 5v14M9 19h6",
     "trash": "M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6",
     "plus": "M12 5v14M5 12h14",
+    # The disclosure arrow. Two of them rather than one rotated icon: a
+    # rotation would have to be animated to read as the same triangle
+    # moving, and a static rotated glyph just looks like a different icon.
+    "chevron-right": "M9 5l7 7-7 7",
+    "chevron-down": "M5 9l7 7 7-7",
+    "close": "M6 6l12 12M18 6L6 18",
     "cpu": "M7 7h10v10H7zM4 10h3M4 14h3M17 10h3M17 14h3"
            "M10 4v3M14 4v3M10 17v3M14 17v3",
     "info": "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01",

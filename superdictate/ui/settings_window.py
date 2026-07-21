@@ -60,6 +60,7 @@ from ..settings import (
     Settings,
     TextStyle,
 )
+from ..textproc import PRESET_FILLERS
 from ..updater import PeriodicChecker
 from . import icons
 from .recorder import ShortcutRecorderDialog
@@ -374,8 +375,7 @@ class SettingsWindow(QDialog):
                             self._text_style_hint)
         self._text_style_changed()
 
-        self._fillers = self._checkbox(
-            recognition, "settings_remove_fillers", "remove_filler_words")
+        self._fillers = self._filler_row(recognition)
         self._digits = self._checkbox(
             recognition, "settings_numbers_as_digits", "numbers_as_digits",
             i18n.tr("settings_numbers_as_digits_hint"))
@@ -622,6 +622,175 @@ class SettingsWindow(QDialog):
         box.toggled.connect(lambda value, k=draft_key: self._draft.update({k: value}))
         section.add_row(None, box, HintIcon(hint) if hint else None)
         return box
+
+    # -- filler words -------------------------------------------------
+
+    def _filler_row(self, section: Section) -> QCheckBox:
+        """The switch, plus a list of words folded away behind an arrow.
+
+        The old row named two English sounds in its label and offered
+        nothing else: "Убирать слова-паразиты (um, uh)". What it actually
+        removed was six English interjections, which is close to useless
+        for dictation in Russian. The words are now a list you can see and
+        change — but they stay folded, because thirty checkboxes unfolded
+        by default would bury every setting under them.
+        """
+        master = QCheckBox(i18n.tr("settings_remove_fillers"))
+        master.setChecked(bool(self._draft.get("remove_filler_words")))
+        master.toggled.connect(
+            lambda value: self._draft.update(remove_filler_words=value))
+
+        self._filler_toggle = QPushButton(i18n.tr("settings_fillers_list"))
+        self._filler_toggle.setObjectName("Link")
+        self._filler_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._filler_toggle.clicked.connect(self._toggle_filler_panel)
+
+        header = QWidget()
+        header.setObjectName("Plain")
+        row = QHBoxLayout(header)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        row.addWidget(master)
+        row.addWidget(self._filler_toggle)
+        row.addStretch(1)
+        section.add_row(None, header)
+
+        self._filler_panel = QWidget()
+        self._filler_panel.setObjectName("Plain")
+        panel = QVBoxLayout(self._filler_panel)
+        panel.setContentsMargins(0, 2, 0, 4)
+        panel.setSpacing(8)
+        note = QLabel(i18n.tr("settings_fillers_note"))
+        note.setObjectName("Caption")
+        note.setWordWrap(True)
+        panel.addWidget(note)
+
+        self._filler_grid = QGridLayout()
+        self._filler_grid.setHorizontalSpacing(12)
+        self._filler_grid.setVerticalSpacing(4)
+        panel.addLayout(self._filler_grid)
+
+        adder = QHBoxLayout()
+        adder.setContentsMargins(0, 0, 0, 0)
+        adder.setSpacing(8)
+        self._filler_input = QLineEdit()
+        self._filler_input.setPlaceholderText(i18n.tr("settings_fillers_add"))
+        self._filler_input.returnPressed.connect(self._add_filler_word)
+        add = QPushButton(i18n.tr("corrections_add"))
+        add.setIcon(icons.icon("plus", self._palette.text_muted, 15))
+        add.clicked.connect(self._add_filler_word)
+        adder.addWidget(self._filler_input, 1)
+        adder.addWidget(add)
+        panel.addLayout(adder)
+
+        self._filler_panel.setVisible(False)
+        section.add_row(None, self._filler_panel)
+
+        stored = [str(word) for word in self._draft.get("filler_words") or []]
+        self._filler_enabled = {word.lower() for word in stored}
+        known = {word for word, _ in PRESET_FILLERS}
+        self._filler_custom = [word for word in stored
+                               if word.lower() not in known]
+        self._rebuild_filler_grid()
+        self._update_filler_toggle()
+
+        master.toggled.connect(self._filler_panel.setEnabled)
+        self._filler_panel.setEnabled(master.isChecked())
+        return master
+
+    def _toggle_filler_panel(self) -> None:
+        # isHidden, not isVisible: a widget on a tab that is not the current
+        # one is not visible either, and asking the wrong question there
+        # makes the first click on the arrow do nothing.
+        self._filler_panel.setVisible(self._filler_panel.isHidden())
+        self._update_filler_toggle()
+        # The dialog is fixed-height until something asks it not to be, so
+        # unfolding into a scroll area needs the layout re-run.
+        self._filler_panel.updateGeometry()
+
+    def _update_filler_toggle(self) -> None:
+        expanded = not self._filler_panel.isHidden()
+        self._filler_toggle.setIcon(icons.icon(
+            "chevron-down" if expanded else "chevron-right",
+            self._palette.text_muted, 14))
+        self._filler_toggle.setText(i18n.tr(
+            "settings_fillers_list_count", count=len(self._filler_enabled)))
+
+    def _rebuild_filler_grid(self) -> None:
+        while self._filler_grid.count():
+            item = self._filler_grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        words = [word for word, _ in PRESET_FILLERS] + self._filler_custom
+        custom = {word.lower() for word in self._filler_custom}
+        # Four across: the words are short, and three columns made the list
+        # thirteen rows tall, which is most of the dialog for one setting.
+        columns = 4
+        for index, word in enumerate(words):
+            box = QCheckBox(word)
+            box.setChecked(word.lower() in self._filler_enabled)
+            box.toggled.connect(
+                lambda value, w=word: self._set_filler_enabled(w, value))
+            if word.lower() in custom:
+                cell = QWidget()
+                cell.setObjectName("Plain")
+                line = QHBoxLayout(cell)
+                line.setContentsMargins(0, 0, 0, 0)
+                line.setSpacing(4)
+                drop = QPushButton()
+                drop.setObjectName("Link")
+                drop.setIcon(icons.icon("close", self._palette.text_faint, 12))
+                drop.setCursor(Qt.CursorShape.PointingHandCursor)
+                drop.setToolTip(i18n.tr("corrections_remove"))
+                drop.clicked.connect(lambda _=False, w=word: self._drop_filler_word(w))
+                line.addWidget(box)
+                line.addWidget(drop)
+                line.addStretch(1)
+                widget: QWidget = cell
+            else:
+                widget = box
+            self._filler_grid.addWidget(widget, index // columns, index % columns)
+
+    def _set_filler_enabled(self, word: str, enabled: bool) -> None:
+        if enabled:
+            self._filler_enabled.add(word.lower())
+        else:
+            self._filler_enabled.discard(word.lower())
+        self._store_filler_words()
+        self._update_filler_toggle()
+
+    def _add_filler_word(self) -> None:
+        word = " ".join(self._filler_input.text().split()).lower()
+        self._filler_input.clear()
+        known = {w.lower() for w, _ in PRESET_FILLERS} | {
+            w.lower() for w in self._filler_custom}
+        if not word:
+            return
+        if word not in known:
+            self._filler_custom.append(word)
+        # A word typed in is a word wanted: adding it also ticks it, and
+        # typing one that is already on the list ticks that one instead of
+        # silently doing nothing.
+        self._filler_enabled.add(word)
+        self._store_filler_words()
+        self._rebuild_filler_grid()
+        self._update_filler_toggle()
+
+    def _drop_filler_word(self, word: str) -> None:
+        self._filler_custom = [w for w in self._filler_custom
+                               if w.lower() != word.lower()]
+        self._filler_enabled.discard(word.lower())
+        self._store_filler_words()
+        self._rebuild_filler_grid()
+        self._update_filler_toggle()
+
+    def _store_filler_words(self) -> None:
+        """Saved in list order, presets first, so the file stays readable."""
+        words = [word for word, _ in PRESET_FILLERS] + self._filler_custom
+        self._draft.update(filler_words=[
+            word for word in words if word.lower() in self._filler_enabled])
 
     def _add_correction_item(self, correction: Correction) -> None:
         item = QListWidgetItem()

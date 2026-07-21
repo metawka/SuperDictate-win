@@ -306,6 +306,33 @@ def test_hotkey_json_guards() -> None:
            HotkeyChoice(VK_RCONTROL, 0))
 
 
+def test_filler_word_list() -> None:
+    from .settings import DEFAULT_FILLER_WORDS
+
+    text, count = remove_filler_words("Эм, привет. Ээ, как дела?",
+                                      DEFAULT_FILLER_WORDS)
+    _check("fillers: russian hesitations removed", text, "Привет. Как дела?")
+    _check("fillers: russian count", count, 2)
+
+    # The whole point of the word boundaries: "эм" inside "Эмма" is not a
+    # hesitation, and a chosen word must not eat the words around it.
+    _check("fillers: inside a word is left alone",
+           remove_filler_words("Эмма пришла к маме", DEFAULT_FILLER_WORDS)[0],
+           "Эмма пришла к маме")
+
+    text, _ = remove_filler_words("Ну это самое, короче, я пошёл",
+                                  ("ну", "это самое", "короче"))
+    _check("fillers: longest phrase wins", text, "Я пошёл")
+
+    _check("fillers: nothing chosen removes nothing",
+           remove_filler_words("Ну, эм, ладно", ()),
+           ("Ну, эм, ладно", 0))
+
+    _check("fillers: a word not on the list stays",
+           remove_filler_words("Короче, ладно", DEFAULT_FILLER_WORDS)[0],
+           "Короче, ладно")
+
+
 def test_compact_numbers() -> None:
     from . import i18n
     from .ui.stats import compact
@@ -345,6 +372,7 @@ _TESTS = [
     test_pipeline_order,
     test_settings_round_trip,
     test_hotkey_json_guards,
+    test_filler_word_list,
     test_compact_numbers,
 ]
 
