@@ -77,6 +77,18 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_section_capture": ("Запись", "Capture"),
     "settings_primary_hotkey": ("Основное сочетание", "Primary shortcut"),
     "settings_history_hotkey": ("Быстрая история", "Quick history"),
+    "settings_edit_hotkey": ("Правка расшифровки", "Edit transcript"),
+    "settings_edit_hotkey_hint": (
+        "Возвращает на экран капсулу с текстом последней диктовки. Текст "
+        "можно поправить прямо в ней: Enter сохраняет, Escape закрывает без "
+        "изменений. Исправленные слова запоминаются как замены и применяются "
+        "к следующим диктовкам. Само поле ввода, куда текст был вставлен, не "
+        "трогается — Windows не даёт одной программе править текст в другой.",
+        "Brings the capsule back with the text of the last dictation. It can "
+        "be corrected right there: Enter saves, Escape closes without "
+        "changes. Corrected words are remembered as replacements and applied "
+        "to later dictations. The field the text was pasted into is left "
+        "alone — Windows does not let one application edit text in another."),
     "settings_record": ("Записать", "Record"),
     "settings_trigger_mode": ("Режим", "Mode"),
     "settings_trigger_hold": ("Удерживать", "Press and hold"),

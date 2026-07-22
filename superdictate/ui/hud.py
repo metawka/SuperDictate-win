@@ -65,6 +65,10 @@ HOVER_POLL_MS = 120
 # microphone for speech that came back empty. It used to be amber, which
 # read as an error; neither case is one, and white matches the accent.
 RESULT_COLOR = "#ffffff"
+# The shape the bars hold when the capsule is on screen for decoration
+# rather than for a recording. Symmetrical, so it reads as a resting
+# waveform and not as a moment frozen out of a real one.
+STATIC_BARS = (0.30, 0.52, 0.70, 0.52, 0.30)
 # The capsule and the transcript bubble are always dark. There used to be a
 # light rendering and a setting to pick between it, the dark one and one
 # that followed the Windows theme; a white capsule over a light window is
@@ -192,6 +196,26 @@ class RecordingHUD(QWidget):
         if self._mode == "hidden":
             self.show_recording()
         self._mode = "transcribing"
+        self.update()
+
+    def show_static(self) -> None:
+        """The capsule with nothing going on inside it.
+
+        The transcript editor brings it back because the correction
+        belongs to the dictation it came from and should look like it.
+        It is decoration and only decoration: no frame timer runs, the
+        bars hold one shape, and the window stays as click-through as it
+        is during a recording.
+        """
+        self._mode = "static"
+        self._bar_levels = list(STATIC_BARS)
+        self._frame_timer.stop()
+        self._hold_timer.stop()
+        self._reposition()
+        self._make_click_through()
+        self.show()
+        self._follow_timer.start()
+        self._animate_to(1.0, ANIMATE_IN_SECONDS)
         self.update()
 
     def show_result(self, icon_name: str, color: str) -> None:
@@ -340,7 +364,7 @@ class RecordingHUD(QWidget):
             painter.end()
             return
 
-        spec = (self.recording_color if self._mode == "recording"
+        spec = (self.recording_color if self._mode in ("recording", "static")
                 else self.transcribing_color)
 
         scale = self.size_preset.scale

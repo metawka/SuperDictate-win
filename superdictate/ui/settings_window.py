@@ -328,6 +328,9 @@ class SettingsWindow(QDialog):
             keys, "settings_primary_hotkey", "hotkey")
         self._history_hotkey_button = self._shortcut_row(
             keys, "settings_history_hotkey", "history_hotkey")
+        self._edit_hotkey_button = self._shortcut_row(
+            keys, "settings_edit_hotkey", "edit_hotkey",
+            i18n.tr("settings_edit_hotkey_hint"))
 
         behaviour = Section(i18n.tr("settings_section_behaviour"))
         self._trigger = self._combo(
@@ -581,14 +584,15 @@ class SettingsWindow(QDialog):
                         HintIcon(hint) if hint else None)
         return field
 
-    def _shortcut_row(self, section: Section, label_key: str,
-                      draft_key: str) -> QPushButton:
+    def _shortcut_row(self, section: Section, label_key: str, draft_key: str,
+                      hint: Optional[str] = None) -> QPushButton:
         choice = HotkeyChoice.from_json(self._draft[draft_key],
                                         getattr(self._settings, draft_key))
         button = QPushButton(hotkey_name(choice, i18n.language()))
         button.setIcon(icons.icon("keyboard", self._palette.text_muted, 15))
         button.clicked.connect(lambda: self._record_shortcut(draft_key, button))
-        section.add_row(i18n.tr(label_key), button)
+        section.add_row(i18n.tr(label_key), button,
+                        HintIcon(hint) if hint else None)
         return button
 
     def _record_shortcut(self, draft_key: str, button: QPushButton) -> None:

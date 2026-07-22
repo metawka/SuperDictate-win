@@ -118,6 +118,20 @@ class History:
             self._entries = []
         self.save()
 
+    def amend(self, original: str, text: str) -> bool:
+        """Rewrite the newest entry, provided it is still ``original``.
+
+        The transcript editor corrects the dictation that just happened.
+        If another one has landed in the meantime the archive is left
+        alone rather than rewriting whichever entry is now on top.
+        """
+        with self._lock:
+            if not self._entries or self._entries[0].text != original:
+                return False
+            self._entries[0].text = text
+        self.save()
+        return True
+
     def remove(self, index: int) -> None:
         with self._lock:
             if 0 <= index < len(self._entries):
@@ -247,6 +261,34 @@ class Corrections:
     def all(self) -> list:
         with self._lock:
             return list(self._items)
+
+    def learn(self, pairs) -> int:
+        """Record (heard, meant) pairs, one rule per source word.
+
+        A second correction of the same word is the user changing their
+        mind, not a second rule: the existing entry is rewritten in place
+        so the dictionary cannot end up with two answers for one input.
+        """
+        from .settings import Correction
+
+        learned = 0
+        with self._lock:
+            for raw_source, raw_replacement in pairs:
+                source = " ".join(str(raw_source).split())
+                replacement = " ".join(str(raw_replacement).split())
+                if not source or not replacement:
+                    continue
+                key = source.casefold()
+                for index, item in enumerate(self._items):
+                    if item.source.casefold() == key:
+                        self._items[index] = Correction(source, replacement)
+                        break
+                else:
+                    self._items.append(Correction(source, replacement))
+                learned += 1
+        if learned:
+            self.save()
+        return learned
 
     def replace_all(self, items) -> None:
         with self._lock:

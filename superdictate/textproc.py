@@ -556,3 +556,64 @@ def process_transcript(
     # cannot re-expose a full stop that this pass already took off.
     text = apply_text_style(text.strip(), style)
     return text.strip(), applied, removed
+
+
+# What counts as one token when a hand-corrected transcript is compared
+# with the model's own. Letters and digits, plus the inner hyphen and
+# apostrophe that hold "какой-то" and "don't" together.
+_WORD_RE = re.compile(r"[^\W_]+(?:[-'’][^\W_]+)*", re.UNICODE)
+
+
+def _learnable(source: str, replacement: str) -> bool:
+    """Whether a pair is worth remembering at all.
+
+    A difference only in case or only in punctuation is not a
+    misrecognition, it is the text style setting or a comma the user moved.
+    Storing those would make the dictionary rewrite correct text.
+    """
+    if not source or not replacement:
+        return False
+    if source == replacement:
+        return False
+    def bare(phrase: str) -> str:
+        # Joined with the space kept, not dropped: "не много" for
+        # "немного" is a genuine correction, and running the words
+        # together here would make it look like a comma had moved.
+        return " ".join(_WORD_RE.findall(phrase)).casefold()
+
+    return bare(source) != bare(replacement)
+
+
+def learned_corrections(heard: str, meant: str) -> list[tuple[str, str]]:
+    """The word pairs implied by an edit, as (what came out, what it was).
+
+    Only substitutions are learnable. A word the user simply deleted has
+    nothing to be replaced by, and a word they inserted has nothing to
+    replace, so both sides of a pair must exist for it to be a rule; the
+    dictionary rejects a half of one in any case.
+
+    Runs of the same length are paired word by word, which is the common
+    case of one misheard word among many. A run of a different length is
+    kept whole — "не мог" for "немного" is a real rule, and splitting it
+    would produce two wrong ones.
+    """
+    from difflib import SequenceMatcher
+
+    before = _WORD_RE.findall(heard)
+    after = _WORD_RE.findall(meant)
+    if not before or not after:
+        return []
+
+    matcher = SequenceMatcher(
+        None, [word.casefold() for word in before],
+        [word.casefold() for word in after], autojunk=False)
+    pairs: list[tuple[str, str]] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag != "replace":
+            continue
+        if i2 - i1 == j2 - j1:
+            candidates = list(zip(before[i1:i2], after[j1:j2]))
+        else:
+            candidates = [(" ".join(before[i1:i2]), " ".join(after[j1:j2]))]
+        pairs.extend(pair for pair in candidates if _learnable(*pair))
+    return pairs

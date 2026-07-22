@@ -83,6 +83,8 @@ class DictationController(QObject):
     # Carries (icon name, message).
     dictation_failed = Signal(str, str)
     history_toggle_requested = Signal()
+    # Carries the text of the last dictation, to be shown for editing.
+    transcript_edit_requested = Signal(str)
     settings_applied = Signal()
 
     def __init__(self, settings: Settings) -> None:
@@ -107,6 +109,11 @@ class DictationController(QObject):
         self._preview_stop: Optional[threading.Event] = None
         self._terminating = False
         self.last_error: str = ""
+        # What the last dictation produced, kept so the editor has
+        # something to open on. Deliberately not restored from the archive
+        # at startup: correcting a sentence from yesterday is what the
+        # replacement dictionary in the settings is for.
+        self.last_transcript: str = ""
 
         self.recorder = audio.Recorder(
             on_level=self._on_level,
@@ -261,6 +268,7 @@ class DictationController(QObject):
     def _apply_hotkey_settings(self) -> None:
         self.listener.hotkey = self.settings.hotkey
         self.listener.history_hotkey = self.settings.history_hotkey
+        self.listener.edit_hotkey = self.settings.edit_hotkey
         self.listener.trigger_mode = self.settings.trigger_mode
         self.listener.reset_state()
 
@@ -288,6 +296,8 @@ class DictationController(QObject):
                 self.cancel_recording()
             elif action is Action.SHOW_HISTORY:
                 self.history_toggle_requested.emit()
+            elif action is Action.SHOW_EDITOR:
+                self.request_transcript_edit()
             elif action is Action.REJECTED_BUSY_PRESS:
                 self.sounds.play("rejected")
 
@@ -535,6 +545,7 @@ class DictationController(QObject):
         ))
         self.usage.record(text, result.audio_seconds)
         self.transcript_ready.emit(text)
+        self.last_transcript = text
 
         if job.recovered:
             # Recovered audio never auto-pastes; see _recover_pending_dictation.
@@ -546,6 +557,46 @@ class DictationController(QObject):
             press_enter=job.behavior.presses_enter,
             enter_delay_ms=self.settings.enter_delay_milliseconds,
         )
+
+    # -- correcting the last dictation ---------------------------------
+
+    def request_transcript_edit(self) -> None:
+        """Open the editor on the last dictation, if there is one to open.
+
+        Refused mid-dictation: the capsule is the recording's, and the
+        text being corrected would be replaced a second later anyway.
+        """
+        if self.state is not AppState.READY or self._terminating:
+            self.sounds.play("rejected")
+            return
+        if not self.last_transcript:
+            self.sounds.play("rejected")
+            return
+        self.transcript_edit_requested.emit(self.last_transcript)
+
+    def apply_transcript_edit(self, edited: str) -> int:
+        """Learn from a hand-corrected transcript. Returns rules learned.
+
+        Nothing is typed anywhere. Windows does not let one application
+        read another's text field, so there is no way to tell whether the
+        dictation is still where it was put, let alone edit it in place;
+        what the correction is worth is the next dictation, where the
+        replacement dictionary turns the misheard word into the right one
+        before it is ever pasted.
+        """
+        original = self.last_transcript
+        edited = edited.strip()
+        if not edited or edited == original:
+            return 0
+
+        pairs = textproc.learned_corrections(original, edited)
+        learned = self.corrections.learn(pairs)
+        if learned:
+            log.info("Learned %d correction(s) from an edited transcript", learned)
+        self.last_transcript = edited
+        if self.history.amend(original, edited):
+            self.transcript_ready.emit(edited)
+        return learned
 
     # -- manual insertion (history window) -----------------------------
 

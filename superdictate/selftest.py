@@ -18,6 +18,7 @@ from .hotkeys import (
     VK_ESCAPE,
     VK_LCONTROL,
     VK_RCONTROL,
+    VK_RMENU,
     VK_RSHIFT,
     Action,
     HotkeyChoice,
@@ -29,6 +30,7 @@ from .settings import Correction, TextStyle
 from .textproc import (
     apply_corrections,
     apply_text_style,
+    learned_corrections,
     numbers_as_digits,
     process_transcript,
     remove_filler_words,
@@ -47,6 +49,7 @@ def _check(name: str, actual, expected) -> None:
 
 HOTKEY = HotkeyChoice(VK_RCONTROL)
 HISTORY_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_SHIFT)
+EDIT_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_ALT)
 
 
 def _machine() -> HotkeyStateMachine:
@@ -59,6 +62,7 @@ def _feed(machine, vk, down, modifiers, *, mode=TriggerMode.TOGGLE,
         _Event(vk=vk, is_down=down, modifiers=modifiers, is_repeat=repeat),
         hotkey=HOTKEY,
         history_hotkey=HISTORY_HOTKEY,
+        edit_hotkey=EDIT_HOTKEY,
         trigger_mode=mode,
         is_recording=recording,
         can_start_recording=can_start,
@@ -106,6 +110,31 @@ def test_history_chord() -> None:
     _feed(machine, VK_RSHIFT, True, MOD_SHIFT)
     result = _feed(machine, VK_RCONTROL, True, MOD_SHIFT | MOD_CTRL)
     _check("history: chord opens history", result.actions, [Action.SHOW_HISTORY])
+
+
+def test_edit_chord() -> None:
+    """Alt + Right Ctrl opens the editor, and its two neighbours still work.
+
+    All three shortcuts are built on the same physical key, so the chords
+    have to be tried before the bare one; getting the order wrong makes
+    the dictation shortcut answer for every one of them.
+    """
+    machine = _machine()
+    alt = _feed(machine, VK_RMENU, True, MOD_ALT)
+    _check("edit: alt itself reaches the app", alt.suppress, False)
+    chord = _feed(machine, VK_RCONTROL, True, MOD_ALT | MOD_CTRL)
+    _check("edit: chord opens the editor", chord.actions, [Action.SHOW_EDITOR])
+    _check("edit: chord primary is suppressed", chord.suppress, True)
+
+    machine = _machine()
+    _check("edit: bare right ctrl still dictates",
+           _feed(machine, VK_RCONTROL, True, MOD_CTRL).actions, [Action.PRESS])
+
+    machine = _machine()
+    _feed(machine, VK_RSHIFT, True, MOD_SHIFT)
+    _check("edit: shift chord still opens history",
+           _feed(machine, VK_RCONTROL, True, MOD_SHIFT | MOD_CTRL).actions,
+           [Action.SHOW_HISTORY])
 
 
 def test_escape_cancels_only_while_recording() -> None:
@@ -166,6 +195,31 @@ def test_corrections() -> None:
 
     text, _ = apply_corrections("подгитовка", corrections)
     _check("corrections: respects word boundaries", text, "подгитовка")
+
+
+def test_learned_corrections() -> None:
+    """What a hand-corrected transcript is allowed to teach the dictionary."""
+    _check("learned: one word out of several",
+           learned_corrections("поставь чайник на плиту",
+                               "поставь чайник на плите"),
+           [("плиту", "плите")])
+    # Different lengths on the two sides are kept whole: splitting them
+    # would invent two rules neither of which is what the user meant.
+    _check("learned: one word split into two",
+           learned_corrections("немного текста", "не много текста"),
+           [("немного", "не много")])
+    _check("learned: case alone is not a misrecognition",
+           learned_corrections("привет мир", "Привет мир"), [])
+    _check("learned: punctuation alone is not either",
+           learned_corrections("привет, мир", "привет мир"), [])
+    # A word with nothing to pair it with cannot become a rule: the
+    # dictionary has no way to express "replace this with nothing".
+    _check("learned: a deletion teaches nothing",
+           learned_corrections("это очень хорошо", "это хорошо"), [])
+    _check("learned: an insertion teaches nothing",
+           learned_corrections("это хорошо", "это очень хорошо"), [])
+    _check("learned: an untouched transcript teaches nothing",
+           learned_corrections("всё верно", "всё верно"), [])
 
 
 def test_filler_removal() -> None:
@@ -393,10 +447,12 @@ _TESTS = [
     test_hold_press_and_release,
     test_left_control_does_not_trigger,
     test_history_chord,
+    test_edit_chord,
     test_escape_cancels_only_while_recording,
     test_modifiers_are_never_swallowed,
     test_unk_repair,
     test_corrections,
+    test_learned_corrections,
     test_filler_removal,
     test_text_style,
     test_casual_style,

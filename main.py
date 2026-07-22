@@ -59,7 +59,7 @@ def main(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setApplicationName("Dictation")
     # No display name: Qt would append " - Dictation" to every window title,
-    # and the control panel already says "Dictation 2.2.3".
+    # and the control panel already says "Dictation 2.3.0".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -88,6 +88,7 @@ def main(argv: list[str]) -> int:
     # The only notification that has somewhere to go when clicked.
     tray.messageClicked.connect(windows.open_update_page)
     controller.history_toggle_requested.connect(windows.toggle_history)
+    controller.transcript_edit_requested.connect(windows.show_editor)
     # Anything wrong with the machine goes to the Windows notification
     # centre, where it stays until it is read: "no microphone" is worth
     # coming back to. Anything wrong with the dictation itself goes to the
@@ -130,6 +131,7 @@ class _Windows:
         self._history = None
         self._hud = None
         self._bubble = None
+        self._editor = None
         self._toasts = None
         self.tray = None
         self._failure_message = ""
@@ -255,6 +257,36 @@ class _Windows:
             self._bubble = TranscriptBubble(self.hud)
             self._apply_hud_settings()
         return self._bubble
+
+    # -- correcting the last dictation ----------------------------------
+
+    @property
+    def editor(self):
+        if self._editor is None:
+            from superdictate.ui.editor import TranscriptEditor
+
+            self._editor = TranscriptEditor(self.hud)
+            self._editor.applied.connect(self._controller.apply_transcript_edit)
+            self._editor.closed.connect(self._editor_closed)
+        return self._editor
+
+    def show_editor(self, text: str) -> None:
+        """The capsule comes back for the look of it; the bubble is the point.
+
+        The keyboard hook is paused for as long as the editor is up, the
+        same way the shortcut recorder pauses it: every key pressed here
+        is meant for the text, and Right Ctrl typed into the bubble
+        starting a dictation would be absurd.
+        """
+        self._controller.listener.paused = True
+        self.hud.show_static()
+        self.editor.edit(text)
+
+    def _editor_closed(self) -> None:
+        self._controller.listener.paused = False
+        self._controller.listener.reset_state()
+        if self._hud is not None:
+            self._hud.hide_hud()
 
     def _apply_hud_settings(self) -> None:
         settings = self._controller.settings
