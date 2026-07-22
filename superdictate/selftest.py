@@ -367,6 +367,24 @@ def test_autostart_starts_in_the_tray() -> None:
     _check("autostart: executable is quoted", command.startswith('"'), True)
 
 
+def test_autostart_target_parsing() -> None:
+    """Which executable an existing Run entry names.
+
+    Read wrong, a stale entry either never gets repaired or gets
+    repaired when it should have been left alone.
+    """
+    from .system import _autostart_target
+
+    _check("autostart target: quoted path with a flag",
+           _autostart_target(r'"C:\Program Files\D1CT\Dictation.exe" --minimized'),
+           r"C:\Program Files\D1CT\Dictation.exe")
+    _check("autostart target: quoted path alone",
+           _autostart_target(r'"C:\Apps\Dictation.exe"'), r"C:\Apps\Dictation.exe")
+    _check("autostart target: unquoted",
+           _autostart_target(r"C:\Apps\Dictation.exe --minimized"),
+           r"C:\Apps\Dictation.exe")
+
+
 # -- runner ---------------------------------------------------------------
 
 _TESTS = [
@@ -389,6 +407,7 @@ _TESTS = [
     test_filler_word_list,
     test_compact_numbers,
     test_autostart_starts_in_the_tray,
+    test_autostart_target_parsing,
 ]
 
 

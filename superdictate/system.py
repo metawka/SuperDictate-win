@@ -21,6 +21,7 @@ import ctypes
 import ctypes.wintypes as wt
 import io
 import math
+import os
 import struct
 import sys
 import threading
@@ -427,20 +428,43 @@ def _autostart_command() -> Optional[str]:
         return None
 
 
-def repair_autostart() -> None:
-    """Add ``--minimized`` to an entry written before it was included.
+def _autostart_target(command: str) -> str:
+    """The executable a Run entry names, unquoted."""
+    if not command.startswith('"'):
+        return command.split(" ", 1)[0]
+    end = command.find('"', 1)
+    return command[1:end] if end > 0 else command[1:]
 
-    Only when the entry already points at this very executable: a copy
-    run from source has no business repointing the installed copy's
-    autostart at a checkout.
+
+def repair_autostart() -> None:
+    """Bring a stale login entry up to date. Two ways it goes stale.
+
+    One: it was written before ``--minimized`` was included, so the app
+    came up with its window over everything at every login.
+
+    Two: it names an executable that is no longer there. Installs made
+    when the app was called D1CT sat in a folder of that name, and the
+    installer that finally moves them leaves any entry the user wrote
+    from inside the app pointing at the old path.
+
+    Repointing is only ever done by a frozen build: a copy run from a
+    source checkout has no business aiming the installed app's autostart
+    at a working directory.
     """
     current = _autostart_command()
-    if current is None or "--minimized" in current:
+    if current is None:
         return
-    if f'"{sys.executable}"' not in current:
+
+    same_executable = f'"{sys.executable}"' in current
+    if same_executable and "--minimized" in current:
+        return
+
+    orphaned = (getattr(sys, "frozen", False)
+                and not os.path.exists(_autostart_target(current)))
+    if not (same_executable or orphaned):
         return
     if set_autostart(True):
-        log.info("Autostart entry updated to start in the tray")
+        log.info("Autostart entry repaired: %s -> %s", current, _launch_command())
 
 
 def set_autostart(enabled: bool) -> bool:

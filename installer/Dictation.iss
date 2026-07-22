@@ -8,7 +8,7 @@
 ;   & "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" installer\Dictation.iss
 
 #define AppName        "Dictation"
-#define AppVersion     "2.2.2"
+#define AppVersion     "2.2.3"
 #define AppPublisher   "metawka"
 #define AppURL         "https://github.com/metawka/SuperDictate-win"
 #define AppExeName     "Dictation.exe"
@@ -28,6 +28,14 @@ AppUpdatesURL={#AppURL}/releases
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+; The AppId has not changed since the app was called D1CT, and Inno reuses
+; the directory and Start-menu group recorded under it. Every upgrade
+; therefore reinstalled into ...\Programs\D1CT, under a Start-menu folder
+; of the same name, however many times the name in this script changed.
+; Both are now taken from the script again, and the leftovers are removed
+; after the files are in place (see CurStepChanged).
+UsePreviousAppDir=no
+UsePreviousGroup=no
 LicenseFile=..\LICENSE
 OutputDir=..\dist
 OutputBaseFilename=Dictation-{#AppVersion}-setup
@@ -115,13 +123,47 @@ procedure SHChangeNotify(EventId: LongInt; Flags: Cardinal;
                          Item1, Item2: LongInt);
   external 'SHChangeNotify@shell32.dll stdcall';
 
+// A copy running in the tray holds its own files open, so an upgrade
+// either fails to replace them or defers the replacement to a reboot.
+// Uninstall already does this; installing had been relying on the user
+// having quit first.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{cmd}'), '/C taskkill /IM {#AppExeName} /F', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec(ExpandConstant('{cmd}'), '/C taskkill /IM D1CT.exe /F', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := '';
+end;
+
 // Explorer caches the icon it has seen for an executable, so after the
 // artwork changed the taskbar and the Start menu kept drawing the old one
 // until something told the shell to look again.
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  LegacyDir: String;
+  LegacyGroup: String;
 begin
   if CurStep = ssPostInstall then
+  begin
+    // Anyone who installed back when the app was called D1CT has been
+    // upgrading into a folder of that name ever since. The files are in
+    // the right place by now, so the old one can go — carefully, since
+    // a custom install directory could in principle be that very path.
+    LegacyDir := ExpandConstant('{localappdata}\Programs\D1CT');
+    if DirExists(LegacyDir) and
+       (CompareText(LegacyDir, ExpandConstant('{app}')) <> 0) then
+      DelTree(LegacyDir, True, True, True);
+
+    LegacyGroup := ExpandConstant('{userprograms}\D1CT');
+    if DirExists(LegacyGroup) and
+       (CompareText(LegacyGroup, ExpandConstant('{group}')) <> 0) then
+      DelTree(LegacyGroup, True, True, True);
+
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, 0, 0);
+  end;
 end;
 
 // Settings, history and the 640 MB model cache live outside the install
