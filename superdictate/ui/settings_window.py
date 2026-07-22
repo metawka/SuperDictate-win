@@ -326,8 +326,6 @@ class SettingsWindow(QDialog):
         keys = Section(i18n.tr("settings_tab_hotkeys"))
         self._hotkey_button = self._shortcut_row(
             keys, "settings_primary_hotkey", "hotkey")
-        self._history_hotkey_button = self._shortcut_row(
-            keys, "settings_history_hotkey", "history_hotkey")
         self._edit_hotkey_button = self._shortcut_row(
             keys, "settings_edit_hotkey", "edit_hotkey",
             i18n.tr("settings_edit_hotkey_hint"))

@@ -17,6 +17,7 @@ from .hotkeys import (
     MOD_SHIFT,
     VK_ESCAPE,
     VK_LCONTROL,
+    VK_LMENU,
     VK_RCONTROL,
     VK_RMENU,
     VK_RSHIFT,
@@ -48,8 +49,7 @@ def _check(name: str, actual, expected) -> None:
 # -- hotkey state machine -------------------------------------------------
 
 HOTKEY = HotkeyChoice(VK_RCONTROL)
-HISTORY_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_SHIFT)
-EDIT_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_ALT)
+EDIT_HOTKEY = HotkeyChoice(VK_RMENU, MOD_SHIFT)
 
 
 def _machine() -> HotkeyStateMachine:
@@ -61,7 +61,6 @@ def _feed(machine, vk, down, modifiers, *, mode=TriggerMode.TOGGLE,
     return machine.transition(
         _Event(vk=vk, is_down=down, modifiers=modifiers, is_repeat=repeat),
         hotkey=HOTKEY,
-        history_hotkey=HISTORY_HOTKEY,
         edit_hotkey=EDIT_HOTKEY,
         trigger_mode=mode,
         is_recording=recording,
@@ -105,36 +104,35 @@ def test_left_control_does_not_trigger() -> None:
     _check("left control passes through", (result.suppress, result.actions), (False, []))
 
 
-def test_history_chord() -> None:
-    machine = _machine()
-    _feed(machine, VK_RSHIFT, True, MOD_SHIFT)
-    result = _feed(machine, VK_RCONTROL, True, MOD_SHIFT | MOD_CTRL)
-    _check("history: chord opens history", result.actions, [Action.SHOW_HISTORY])
-
-
 def test_edit_chord() -> None:
-    """Alt + Right Ctrl opens the editor, and its two neighbours still work.
+    """Shift + Right Alt opens the editor, whichever key is pressed first.
 
-    All three shortcuts are built on the same physical key, so the chords
-    have to be tried before the bare one; getting the order wrong makes
-    the dictation shortcut answer for every one of them.
+    Regression: the editor shortcut was first built on Right Ctrl, the
+    dictation key itself. Pressing Ctrl before Alt — the order most hands
+    take "Ctrl+Alt" — started a recording on the way in and then let the
+    Alt complete a chord whose primary key had already fired. A shortcut
+    whose primary key does nothing on its own has no such order.
     """
     machine = _machine()
-    alt = _feed(machine, VK_RMENU, True, MOD_ALT)
-    _check("edit: alt itself reaches the app", alt.suppress, False)
-    chord = _feed(machine, VK_RCONTROL, True, MOD_ALT | MOD_CTRL)
-    _check("edit: chord opens the editor", chord.actions, [Action.SHOW_EDITOR])
+    shift = _feed(machine, VK_RSHIFT, True, MOD_SHIFT)
+    _check("edit: shift itself reaches the app", shift.suppress, False)
+    chord = _feed(machine, VK_RMENU, True, MOD_SHIFT | MOD_ALT)
+    _check("edit: shift first opens the editor", chord.actions, [Action.SHOW_EDITOR])
     _check("edit: chord primary is suppressed", chord.suppress, True)
+
+    machine = _machine()
+    alt = _feed(machine, VK_RMENU, True, MOD_ALT)
+    _check("edit: right alt alone does nothing", alt.actions, [])
+    _check("edit: alt first opens the editor",
+           _feed(machine, VK_RSHIFT, True, MOD_SHIFT | MOD_ALT).actions,
+           [Action.SHOW_EDITOR])
 
     machine = _machine()
     _check("edit: bare right ctrl still dictates",
            _feed(machine, VK_RCONTROL, True, MOD_CTRL).actions, [Action.PRESS])
-
-    machine = _machine()
-    _feed(machine, VK_RSHIFT, True, MOD_SHIFT)
-    _check("edit: shift chord still opens history",
-           _feed(machine, VK_RCONTROL, True, MOD_SHIFT | MOD_CTRL).actions,
-           [Action.SHOW_HISTORY])
+    _check("edit: alt added to a running dictation changes nothing",
+           _feed(machine, VK_RMENU, True, MOD_CTRL | MOD_ALT,
+                 recording=True).actions, [])
 
 
 def test_escape_cancels_only_while_recording() -> None:
@@ -148,30 +146,31 @@ def test_escape_cancels_only_while_recording() -> None:
 
 
 def test_modifiers_are_never_swallowed() -> None:
-    """Regression: the history chord must not cost the user the Shift key.
+    """Regression: the editor chord must not cost the user the Shift key.
 
-    History is "Shift + Right Ctrl", so Shift belongs to a shortcut, but
-    suppressing it would break capital letters and Shift-click everywhere
-    until the app quits. Only the chord's primary key may be eaten.
+    The editor is "Shift + Right Alt", so Shift belongs to a shortcut,
+    but suppressing it would break capital letters and Shift-click
+    everywhere until the app quits. Only the chord's primary key may be
+    eaten.
     """
-    from .hotkeys import VK_LSHIFT, VK_RMENU
+    from .hotkeys import VK_LSHIFT
 
     for name, vk, mask in (("left shift", VK_LSHIFT, MOD_SHIFT),
                            ("right shift", VK_RSHIFT, MOD_SHIFT),
-                           ("right alt", VK_RMENU, MOD_ALT)):
+                           ("left alt", VK_LMENU, MOD_ALT)):
         machine = _machine()
         down = _feed(machine, vk, True, mask)
         _check(f"{name} down reaches the app", down.suppress, False)
         up = _feed(machine, vk, False, 0)
         _check(f"{name} up reaches the app", up.suppress, False)
 
-    # Even mid-chord: Shift goes through, only Right Ctrl is eaten.
+    # Even mid-chord: Shift goes through, only Right Alt is eaten.
     machine = _machine()
     shift = _feed(machine, VK_RSHIFT, True, MOD_SHIFT)
     _check("shift before the chord passes", shift.suppress, False)
-    chord = _feed(machine, VK_RCONTROL, True, MOD_SHIFT | MOD_CTRL)
+    chord = _feed(machine, VK_RMENU, True, MOD_SHIFT | MOD_ALT)
     _check("chord primary is suppressed", chord.suppress, True)
-    _check("chord opens history", chord.actions, [Action.SHOW_HISTORY])
+    _check("chord opens the editor", chord.actions, [Action.SHOW_EDITOR])
     release = _feed(machine, VK_RSHIFT, False, 0)
     _check("shift release still reaches the app", release.suppress, False)
 
@@ -446,7 +445,6 @@ _TESTS = [
     test_toggle_does_not_flip_when_busy,
     test_hold_press_and_release,
     test_left_control_does_not_trigger,
-    test_history_chord,
     test_edit_chord,
     test_escape_cancels_only_while_recording,
     test_modifiers_are_never_swallowed,

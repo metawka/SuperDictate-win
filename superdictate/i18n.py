@@ -35,7 +35,7 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "panel_service": ("Служба", "Service"),
     "panel_model": ("Модель", "Model"),
     "panel_hotkey": ("Диктовка", "Dictation"),
-    "panel_hotkey_history": ("История", "History"),
+    "panel_hotkey_edit": ("Правка", "Edit"),
     "panel_restart": ("Перезапустить", "Restart"),
     "panel_check_updates": ("Проверить обновления", "Check for updates"),
     "panel_compute": ("Вычисления", "Compute"),
@@ -76,7 +76,6 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_section_recognition": ("Распознавание", "Recognition"),
     "settings_section_capture": ("Запись", "Capture"),
     "settings_primary_hotkey": ("Основное сочетание", "Primary shortcut"),
-    "settings_history_hotkey": ("Быстрая история", "Quick history"),
     "settings_edit_hotkey": ("Правка расшифровки", "Edit transcript"),
     "settings_edit_hotkey_hint": (
         "Возвращает на экран капсулу с текстом последней диктовки. Текст "

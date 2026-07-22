@@ -115,8 +115,8 @@ class ShortcutRecorderDialog(QDialog):
         if vk in MODIFIER_VK_FLAG:
             # A modifier can be either the chord's prefix or the shortcut
             # itself. Treat it as the shortcut and let whatever is already
-            # held become the required modifiers, pressing Right Alt then
-            # Right Ctrl records "Alt + Right Ctrl".
+            # held become the required modifiers, pressing Right Shift
+            # then Right Alt records "Shift + Right Alt".
             modifiers = self._current_modifier_mask() & ~MODIFIER_VK_FLAG[vk]
             self._pressed_modifiers.add(vk)
             self._select(HotkeyChoice(vk, modifiers))

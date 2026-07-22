@@ -176,6 +176,13 @@ class TranscriptEditor(QWidget):
             " }"
         )
         self._field.document().setDocumentMargin(0)
+        # Centred, like the preview bubble's text and the capsule's bars.
+        # Left-aligned text in a bubble sized to the text puts the last
+        # word hard against the right edge and leaves a ragged gap on the
+        # second line.
+        option = self._field.document().defaultTextOption()
+        option.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._field.document().setDefaultTextOption(option)
         # Placed by hand rather than by a layout. A QTextEdit asks for
         # several lines' worth of minimum height, and a layout honours
         # that: the bubble came out twice as tall as its one line of text
@@ -214,6 +221,10 @@ class TranscriptEditor(QWidget):
 
         self._field.blockSignals(True)
         self._field.setPlainText(text)
+        # setPlainText builds the block with the widget's own alignment,
+        # not the document default, so it has to be said again here.
+        self._field.selectAll()
+        self._field.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self._field.blockSignals(False)
         self._field.moveCursor(QTextCursor.MoveOperation.End)
 

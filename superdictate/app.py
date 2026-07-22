@@ -267,7 +267,6 @@ class DictationController(QObject):
 
     def _apply_hotkey_settings(self) -> None:
         self.listener.hotkey = self.settings.hotkey
-        self.listener.history_hotkey = self.settings.history_hotkey
         self.listener.edit_hotkey = self.settings.edit_hotkey
         self.listener.trigger_mode = self.settings.trigger_mode
         self.listener.reset_state()
@@ -294,8 +293,6 @@ class DictationController(QObject):
                 self.finish_recording(self.settings.primary_completion_behavior)
             elif action is Action.CANCEL:
                 self.cancel_recording()
-            elif action is Action.SHOW_HISTORY:
-                self.history_toggle_requested.emit()
             elif action is Action.SHOW_EDITOR:
                 self.request_transcript_edit()
             elif action is Action.REJECTED_BUSY_PRESS:

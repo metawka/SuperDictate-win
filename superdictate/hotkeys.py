@@ -38,8 +38,8 @@ HC_ACTION = 0
 
 # Modifier bit mask. Deliberately side-agnostic, mirroring the way macOS
 # stores `requiredModifiers` as CGEventFlags while the primary key stays
-# side-specific: "Right Shift + Right Ctrl" requires *a* shift, but the
-# primary key must be the right-hand Ctrl.
+# side-specific: "Right Shift + Right Alt" requires *a* shift, but the
+# primary key must be the right-hand Alt.
 MOD_CTRL = 1 << 0
 MOD_ALT = 1 << 1
 MOD_SHIFT = 1 << 2
@@ -102,10 +102,15 @@ class HotkeyChoice:
 
 
 DEFAULT_HOTKEY = HotkeyChoice(VK_RCONTROL)
-DEFAULT_HISTORY_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_SHIFT)
-# Alt rather than Ctrl or Win: the chord is pressed modifier-first, and Alt
-# is the one modifier that is not already spoken for by the other two.
-DEFAULT_EDIT_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_ALT)
+# Deliberately not built on Right Ctrl, the way the editor shortcut first
+# was and the quick-history one used to be. Right Ctrl on its own starts a
+# dictation the instant it goes down, so a chord ending in it only ever
+# works if the modifier is pressed first — press Ctrl before Alt, the
+# order most hands take "Ctrl+Alt", and you get a recording, and then the
+# Alt completes a chord whose primary key has already fired. Right Alt
+# does nothing by itself, so Shift + Right Alt works pressed either way
+# round and cannot start anything by accident.
+DEFAULT_EDIT_HOTKEY = HotkeyChoice(VK_RMENU, MOD_SHIFT)
 
 
 class TriggerMode(str, Enum):
@@ -117,7 +122,6 @@ class Action(str, Enum):
     PRESS = "press"
     RELEASE = "release"
     CANCEL = "cancel"
-    SHOW_HISTORY = "show_history"
     SHOW_EDITOR = "show_editor"
     REJECTED_BUSY_PRESS = "rejected_busy_press"
 
@@ -155,7 +159,7 @@ class _Consumed:
     """What a shortcut made of an event, and whether to eat the event.
 
     These are two different questions and conflating them is what made an
-    early build swallow every Shift press: the history chord requires
+    early build swallow every Shift press: the editor chord requires
     Shift, so Shift "belonged" to a shortcut and was suppressed even when
     the chord never completed. A modifier must always reach the
     foreground app, only the chord's primary key is ever eaten.
@@ -213,8 +217,8 @@ class _ShortcutState:
             return _CONSUMED_PASS
 
         # Only the primary key is ever eaten. Suppressing a required
-        # modifier would break it system-wide: with history on
-        # "Shift + Right Ctrl", eating Shift costs the user every capital
+        # modifier would break it system-wide: with the editor on
+        # "Shift + Right Alt", eating Shift costs the user every capital
         # letter and every Shift-click.
         is_primary = event.vk == shortcut.vk
 
@@ -257,14 +261,12 @@ class HotkeyStateMachine:
 
     def __init__(self) -> None:
         self._standard = _ShortcutState()
-        self._history = _ShortcutState()
         self._edit = _ShortcutState()
         self._toggle_active = False
         self._suppress_escape_up = False
 
     def reset_all(self) -> None:
         self._standard.reset()
-        self._history.reset()
         self._edit.reset()
         self._toggle_active = False
         self._suppress_escape_up = False
@@ -277,7 +279,6 @@ class HotkeyStateMachine:
         event: _Event,
         *,
         hotkey: HotkeyChoice,
-        history_hotkey: HotkeyChoice,
         trigger_mode: TriggerMode,
         is_recording: bool,
         can_start_recording: bool = True,
@@ -286,15 +287,9 @@ class HotkeyStateMachine:
         if event.vk == VK_ESCAPE:
             return self._transition_escape(event, is_recording)
 
-        # The chords carrying a modifier are tried before the bare key, or
-        # the plain Right Ctrl of the dictation shortcut would answer for
-        # all three. Each returns None when it did not take the event.
-        history = self._transition_chord(
-            self._history, event, is_recording, history_hotkey,
-            Action.SHOW_HISTORY)
-        if history is not None:
-            return history
-
+        # The chord is tried before the bare dictation key: were the two
+        # ever built on the same physical key, the bare one would answer
+        # for both. Returns None when the event was not its.
         editor = self._transition_chord(
             self._edit, event, is_recording, edit_hotkey, Action.SHOW_EDITOR)
         if editor is not None:
@@ -330,10 +325,10 @@ class HotkeyStateMachine:
         self, state: _ShortcutState, event: _Event, is_recording: bool,
         shortcut: HotkeyChoice, action: Action,
     ) -> Optional[_Result]:
-        """One of the secondary shortcuts, which fire on the press alone.
+        """A shortcut that fires on the press alone, with no release edge.
 
-        Returns ``None`` when the event was not theirs, so the caller can
-        offer it to the next shortcut and finally to the app.
+        Returns ``None`` when the event was not its, so the caller can
+        offer it to the dictation shortcut and then to the app.
         """
         consumed = state.consume(event, shortcut)
         if consumed.edge == _Edge.PRESS:
@@ -344,7 +339,7 @@ class HotkeyStateMachine:
         if consumed.edge in (_Edge.RELEASE, _Edge.SUPPRESS) and consumed.suppress:
             return _suppress_only()
         # Anything not actually eaten (a bare modifier, above all) must
-        # fall through to the other shortcuts and then to the app.
+        # fall through to the dictation shortcut and then to the app.
         return None
 
     def _transition_escape(self, event: _Event, is_recording: bool) -> _Result:
@@ -413,7 +408,6 @@ class HotkeyListener:
 
         # Live configuration, updated from the Qt thread.
         self.hotkey = DEFAULT_HOTKEY
-        self.history_hotkey = DEFAULT_HISTORY_HOTKEY
         self.edit_hotkey = DEFAULT_EDIT_HOTKEY
         self.trigger_mode = TriggerMode.TOGGLE
         self.is_recording_active: Callable[[], bool] = lambda: False
@@ -530,7 +524,6 @@ class HotkeyListener:
                 result = self._machine.transition(
                     event,
                     hotkey=self.hotkey,
-                    history_hotkey=self.history_hotkey,
                     edit_hotkey=self.edit_hotkey,
                     trigger_mode=self.trigger_mode,
                     is_recording=self.is_recording_active(),

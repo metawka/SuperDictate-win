@@ -59,7 +59,7 @@ def main(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setApplicationName("Dictation")
     # No display name: Qt would append " - Dictation" to every window title,
-    # and the control panel already says "Dictation 2.3.0".
+    # and the control panel already says "Dictation 2.3.1".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -275,8 +275,8 @@ class _Windows:
 
         The keyboard hook is paused for as long as the editor is up, the
         same way the shortcut recorder pauses it: every key pressed here
-        is meant for the text, and Right Ctrl typed into the bubble
-        starting a dictation would be absurd.
+        is meant for the text, and the dictation key typed into the
+        bubble starting a recording would be absurd.
         """
         self._controller.listener.paused = True
         self.hud.show_static()

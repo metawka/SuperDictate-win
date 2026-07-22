@@ -1,8 +1,10 @@
 """Quick history window.
 
-Opened by the history shortcut (Right Shift + Right Ctrl by default) or
-from the tray. macOS calls this the "quick history": pick a past
-transcript and it goes straight into the window you were typing in.
+Opened from the tray or from the control panel. macOS calls this the
+"quick history": pick a past transcript and it goes straight into the
+window you were typing in. It had a shortcut of its own, Right Shift +
+Right Ctrl, which was dropped along with every other chord ending in the
+dictation key — see :data:`superdictate.hotkeys.DEFAULT_EDIT_HOTKEY`.
 
 The Windows subtlety is focus. Inserting into "the window you were typing
 in" only works if this window was never that window, so the target HWND is

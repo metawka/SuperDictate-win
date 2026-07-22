@@ -19,7 +19,6 @@ from typing import Any, Optional
 from . import paths
 from .hotkeys import (
     DEFAULT_EDIT_HOTKEY,
-    DEFAULT_HISTORY_HOTKEY,
     DEFAULT_HOTKEY,
     HotkeyChoice,
     TriggerMode,
@@ -202,7 +201,6 @@ DEFAULT_FILLER_WORDS: tuple[str, ...] = (
 
 _DEFAULTS: dict[str, Any] = {
     "hotkey": DEFAULT_HOTKEY.to_json(),
-    "history_hotkey": DEFAULT_HISTORY_HOTKEY.to_json(),
     "edit_hotkey": DEFAULT_EDIT_HOTKEY.to_json(),
     "primary_completion_behavior": CompletionBehavior.INSERT.value,
     "text_style": TextStyle.FORMAL.value,
@@ -299,10 +297,6 @@ class Settings:
     @property
     def hotkey(self) -> HotkeyChoice:
         return HotkeyChoice.from_json(self._get("hotkey"), DEFAULT_HOTKEY)
-
-    @property
-    def history_hotkey(self) -> HotkeyChoice:
-        return HotkeyChoice.from_json(self._get("history_hotkey"), DEFAULT_HISTORY_HOTKEY)
 
     @property
     def edit_hotkey(self) -> HotkeyChoice:
