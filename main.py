@@ -59,7 +59,7 @@ def main(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setApplicationName("Dictation")
     # No display name: Qt would append " - Dictation" to every window title,
-    # and the control panel already says "Dictation 2.3.1".
+    # and the control panel already says "Dictation 2.4.0".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -88,6 +88,7 @@ def main(argv: list[str]) -> int:
     # The only notification that has somewhere to go when clicked.
     tray.messageClicked.connect(windows.open_update_page)
     controller.history_toggle_requested.connect(windows.toggle_history)
+    controller.history_bubbles_requested.connect(windows.show_history_bubbles)
     controller.transcript_edit_requested.connect(windows.show_editor)
     # Anything wrong with the machine goes to the Windows notification
     # centre, where it stays until it is read: "no microphone" is worth
@@ -132,6 +133,7 @@ class _Windows:
         self._hud = None
         self._bubble = None
         self._editor = None
+        self._bubble_history = None
         self._toasts = None
         self.tray = None
         self._failure_message = ""
@@ -267,22 +269,52 @@ class _Windows:
 
             self._editor = TranscriptEditor(self.hud)
             self._editor.applied.connect(self._controller.apply_transcript_edit)
-            self._editor.closed.connect(self._editor_closed)
+            self._editor.closed.connect(self._overlay_closed)
         return self._editor
 
     def show_editor(self, text: str) -> None:
-        """The capsule comes back for the look of it; the bubble is the point.
+        """The capsule comes back for the look of it; the bubble is the point."""
+        self._begin_overlay()
+        self.editor.edit(text)
 
-        The keyboard hook is paused for as long as the editor is up, the
+    # -- quick history over the capsule ---------------------------------
+
+    @property
+    def bubble_history(self):
+        if self._bubble_history is None:
+            from superdictate.ui.bubbles import BubbleHistory
+
+            self._bubble_history = BubbleHistory(self.hud)
+            self._bubble_history.chosen.connect(self._insert_from_history)
+            self._bubble_history.forgotten.connect(
+                self._controller.forget_history_entry)
+            self._bubble_history.closed.connect(self._overlay_closed)
+        return self._bubble_history
+
+    def show_history_bubbles(self, entries: list) -> None:
+        self._begin_overlay()
+        self.bubble_history.present(entries)
+
+    def _insert_from_history(self, text: str) -> None:
+        # The foreground has just been handed back and Windows moves focus
+        # asynchronously; typing in the same tick can land in the window on
+        # its way out.
+        QTimer.singleShot(120, lambda: self._controller.insert_text(text))
+
+    # -- shared overlay plumbing ----------------------------------------
+
+    def _begin_overlay(self) -> None:
+        """Capsule up, keyboard hook asleep.
+
+        The hook is paused for as long as one of these windows is up, the
         same way the shortcut recorder pauses it: every key pressed here
-        is meant for the text, and the dictation key typed into the
-        bubble starting a recording would be absurd.
+        belongs to the overlay, and the dictation key starting a recording
+        underneath it would be absurd.
         """
         self._controller.listener.paused = True
         self.hud.show_static()
-        self.editor.edit(text)
 
-    def _editor_closed(self) -> None:
+    def _overlay_closed(self) -> None:
         self._controller.listener.paused = False
         self._controller.listener.reset_state()
         if self._hud is not None:

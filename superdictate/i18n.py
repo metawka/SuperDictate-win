@@ -35,6 +35,7 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "panel_service": ("Служба", "Service"),
     "panel_model": ("Модель", "Model"),
     "panel_hotkey": ("Диктовка", "Dictation"),
+    "panel_hotkey_history": ("История", "History"),
     "panel_hotkey_edit": ("Правка", "Edit"),
     "panel_restart": ("Перезапустить", "Restart"),
     "panel_check_updates": ("Проверить обновления", "Check for updates"),
@@ -76,6 +77,16 @@ _STRINGS: dict[str, tuple[str, str]] = {
     "settings_section_recognition": ("Распознавание", "Recognition"),
     "settings_section_capture": ("Запись", "Capture"),
     "settings_primary_hotkey": ("Основное сочетание", "Primary shortcut"),
+    "settings_history_hotkey": ("Последние расшифровки", "Recent transcripts"),
+    "settings_history_hotkey_hint": (
+        "Показывает последние расшифровки пузырьками над капсулой. Стрелки "
+        "выбирают, Enter вставляет выбранную в то поле, где вы были, Delete "
+        "удаляет её из истории, Escape закрывает. Полная история со всеми "
+        "записями открывается из трея и из панели управления.",
+        "Shows the last few transcripts as bubbles above the capsule. The "
+        "arrow keys choose, Enter inserts the chosen one into the field you "
+        "came from, Delete forgets it, Escape closes. The full history opens "
+        "from the tray and from the control panel."),
     "settings_edit_hotkey": ("Правка расшифровки", "Edit transcript"),
     "settings_edit_hotkey_hint": (
         "Возвращает на экран капсулу с текстом последней диктовки. Текст "

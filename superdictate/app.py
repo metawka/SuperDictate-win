@@ -47,6 +47,11 @@ PREVIEW_MIN_AUDIO_SECONDS = 0.6
 PREVIEW_WINDOW_SECONDS = 30.0
 PREVIEW_DUTY = 0.5
 
+# How many past transcripts the shortcut offers over the capsule. Kept in
+# step with superdictate.ui.bubbles.MAX_ENTRIES, and not imported from it:
+# this module knows nothing about Qt and the self-tests rely on that.
+HISTORY_BUBBLE_COUNT = 6
+
 
 class AppState(str, Enum):
     STARTING = "starting"
@@ -82,7 +87,11 @@ class DictationController(QObject):
     # the user is already looking at, and gone a few seconds later.
     # Carries (icon name, message).
     dictation_failed = Signal(str, str)
+    # The full history window, from the tray and the control panel.
     history_toggle_requested = Signal()
+    # The last few transcripts as bubbles over the capsule, from the
+    # shortcut. Carries them newest first.
+    history_bubbles_requested = Signal(list)
     # Carries the text of the last dictation, to be shown for editing.
     transcript_edit_requested = Signal(str)
     settings_applied = Signal()
@@ -267,6 +276,7 @@ class DictationController(QObject):
 
     def _apply_hotkey_settings(self) -> None:
         self.listener.hotkey = self.settings.hotkey
+        self.listener.history_hotkey = self.settings.history_hotkey
         self.listener.edit_hotkey = self.settings.edit_hotkey
         self.listener.trigger_mode = self.settings.trigger_mode
         self.listener.reset_state()
@@ -293,6 +303,8 @@ class DictationController(QObject):
                 self.finish_recording(self.settings.primary_completion_behavior)
             elif action is Action.CANCEL:
                 self.cancel_recording()
+            elif action is Action.SHOW_HISTORY:
+                self.request_history_bubbles()
             elif action is Action.SHOW_EDITOR:
                 self.request_transcript_edit()
             elif action is Action.REJECTED_BUSY_PRESS:
@@ -554,6 +566,26 @@ class DictationController(QObject):
             press_enter=job.behavior.presses_enter,
             enter_delay_ms=self.settings.enter_delay_milliseconds,
         )
+
+    # -- quick history --------------------------------------------------
+
+    def request_history_bubbles(self) -> None:
+        """Offer the last few transcripts over the capsule.
+
+        Refused mid-dictation for the same reason the editor is: the
+        capsule belongs to the recording that is running.
+        """
+        if self.state is not AppState.READY or self._terminating:
+            self.sounds.play("rejected")
+            return
+        entries = self.history.entries(HISTORY_BUBBLE_COUNT)
+        if not entries:
+            self.sounds.play("rejected")
+            return
+        self.history_bubbles_requested.emit([entry.text for entry in entries])
+
+    def forget_history_entry(self, index: int) -> None:
+        self.history.remove(index)
 
     # -- correcting the last dictation ---------------------------------
 

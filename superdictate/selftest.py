@@ -49,6 +49,7 @@ def _check(name: str, actual, expected) -> None:
 # -- hotkey state machine -------------------------------------------------
 
 HOTKEY = HotkeyChoice(VK_RCONTROL)
+HISTORY_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_SHIFT)
 EDIT_HOTKEY = HotkeyChoice(VK_RMENU, MOD_SHIFT)
 
 
@@ -61,6 +62,7 @@ def _feed(machine, vk, down, modifiers, *, mode=TriggerMode.TOGGLE,
     return machine.transition(
         _Event(vk=vk, is_down=down, modifiers=modifiers, is_repeat=repeat),
         hotkey=HOTKEY,
+        history_hotkey=HISTORY_HOTKEY,
         edit_hotkey=EDIT_HOTKEY,
         trigger_mode=mode,
         is_recording=recording,
@@ -102,6 +104,29 @@ def test_left_control_does_not_trigger() -> None:
     machine = _machine()
     result = _feed(machine, VK_LCONTROL, True, MOD_CTRL)
     _check("left control passes through", (result.suppress, result.actions), (False, []))
+
+
+def test_history_chord() -> None:
+    """Shift + Right Ctrl opens the history without starting a dictation.
+
+    The chord is built on the dictation key itself, so the order matters:
+    with Shift already down the chord is recognised on the Right Ctrl
+    press and eats it, and no recording begins. Hands take "Shift + X" in
+    that order without being asked, which is why this shortcut works and
+    the old "Ctrl + Alt" one did not.
+    """
+    machine = _machine()
+    shift = _feed(machine, VK_RSHIFT, True, MOD_SHIFT)
+    _check("history: shift itself reaches the app", shift.suppress, False)
+    chord = _feed(machine, VK_RCONTROL, True, MOD_SHIFT | MOD_CTRL)
+    _check("history: chord opens the history", chord.actions,
+           [Action.SHOW_HISTORY])
+    _check("history: no dictation starts", Action.PRESS in chord.actions, False)
+    _check("history: right ctrl is swallowed", chord.suppress, True)
+
+    machine = _machine()
+    _check("history: bare right ctrl still dictates",
+           _feed(machine, VK_RCONTROL, True, MOD_CTRL).actions, [Action.PRESS])
 
 
 def test_edit_chord() -> None:
@@ -445,6 +470,7 @@ _TESTS = [
     test_toggle_does_not_flip_when_busy,
     test_hold_press_and_release,
     test_left_control_does_not_trigger,
+    test_history_chord,
     test_edit_chord,
     test_escape_cancels_only_while_recording,
     test_modifiers_are_never_swallowed,

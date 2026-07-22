@@ -102,14 +102,15 @@ class HotkeyChoice:
 
 
 DEFAULT_HOTKEY = HotkeyChoice(VK_RCONTROL)
-# Deliberately not built on Right Ctrl, the way the editor shortcut first
-# was and the quick-history one used to be. Right Ctrl on its own starts a
-# dictation the instant it goes down, so a chord ending in it only ever
-# works if the modifier is pressed first — press Ctrl before Alt, the
-# order most hands take "Ctrl+Alt", and you get a recording, and then the
-# Alt completes a chord whose primary key has already fired. Right Alt
-# does nothing by itself, so Shift + Right Alt works pressed either way
-# round and cannot start anything by accident.
+# A chord built on Right Ctrl only works if the modifier is held first:
+# Right Ctrl starts a dictation the instant it goes down, and once it has,
+# the modifier arriving afterwards completes a chord whose primary key has
+# already fired. With Shift that is no constraint — nobody presses a key
+# and reaches for Shift afterwards — which is why quick history has always
+# worked. With Alt it is fatal, since "Ctrl + Alt" is taken in that order
+# as often as not, so the editor sits on a primary key that does nothing
+# by itself and works pressed either way round.
+DEFAULT_HISTORY_HOTKEY = HotkeyChoice(VK_RCONTROL, MOD_SHIFT)
 DEFAULT_EDIT_HOTKEY = HotkeyChoice(VK_RMENU, MOD_SHIFT)
 
 
@@ -122,6 +123,7 @@ class Action(str, Enum):
     PRESS = "press"
     RELEASE = "release"
     CANCEL = "cancel"
+    SHOW_HISTORY = "show_history"
     SHOW_EDITOR = "show_editor"
     REJECTED_BUSY_PRESS = "rejected_busy_press"
 
@@ -261,12 +263,14 @@ class HotkeyStateMachine:
 
     def __init__(self) -> None:
         self._standard = _ShortcutState()
+        self._history = _ShortcutState()
         self._edit = _ShortcutState()
         self._toggle_active = False
         self._suppress_escape_up = False
 
     def reset_all(self) -> None:
         self._standard.reset()
+        self._history.reset()
         self._edit.reset()
         self._toggle_active = False
         self._suppress_escape_up = False
@@ -282,18 +286,24 @@ class HotkeyStateMachine:
         trigger_mode: TriggerMode,
         is_recording: bool,
         can_start_recording: bool = True,
+        history_hotkey: HotkeyChoice = DEFAULT_HISTORY_HOTKEY,
         edit_hotkey: HotkeyChoice = DEFAULT_EDIT_HOTKEY,
     ) -> _Result:
         if event.vk == VK_ESCAPE:
             return self._transition_escape(event, is_recording)
 
-        # The chord is tried before the bare dictation key: were the two
-        # ever built on the same physical key, the bare one would answer
-        # for both. Returns None when the event was not its.
-        editor = self._transition_chord(
-            self._edit, event, is_recording, edit_hotkey, Action.SHOW_EDITOR)
-        if editor is not None:
-            return editor
+        # The chords are tried before the bare dictation key, and this is
+        # not a nicety: quick history is built on the dictation key itself,
+        # so whichever is asked first answers for both. Each returns None
+        # when the event was not its.
+        for state, shortcut, action in (
+            (self._history, history_hotkey, Action.SHOW_HISTORY),
+            (self._edit, edit_hotkey, Action.SHOW_EDITOR),
+        ):
+            handled = self._transition_chord(
+                state, event, is_recording, shortcut, action)
+            if handled is not None:
+                return handled
 
         consumed = self._standard.consume(event, hotkey)
         if consumed.edge == _Edge.PASS:
@@ -408,6 +418,7 @@ class HotkeyListener:
 
         # Live configuration, updated from the Qt thread.
         self.hotkey = DEFAULT_HOTKEY
+        self.history_hotkey = DEFAULT_HISTORY_HOTKEY
         self.edit_hotkey = DEFAULT_EDIT_HOTKEY
         self.trigger_mode = TriggerMode.TOGGLE
         self.is_recording_active: Callable[[], bool] = lambda: False
@@ -524,6 +535,7 @@ class HotkeyListener:
                 result = self._machine.transition(
                     event,
                     hotkey=self.hotkey,
+                    history_hotkey=self.history_hotkey,
                     edit_hotkey=self.edit_hotkey,
                     trigger_mode=self.trigger_mode,
                     is_recording=self.is_recording_active(),

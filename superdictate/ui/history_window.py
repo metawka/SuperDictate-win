@@ -2,9 +2,10 @@
 
 Opened from the tray or from the control panel. macOS calls this the
 "quick history": pick a past transcript and it goes straight into the
-window you were typing in. It had a shortcut of its own, Right Shift +
-Right Ctrl, which was dropped along with every other chord ending in the
-dictation key — see :data:`superdictate.hotkeys.DEFAULT_EDIT_HOTKEY`.
+window you were typing in. This is the whole list, with copying and
+deleting; the shortcut, Shift + Right Ctrl, shows only the last few and
+shows them as bubbles over the capsule — see
+:mod:`superdictate.ui.bubbles`.
 
 The Windows subtlety is focus. Inserting into "the window you were typing
 in" only works if this window was never that window, so the target HWND is
