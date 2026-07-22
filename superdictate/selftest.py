@@ -353,6 +353,20 @@ def test_compact_numbers() -> None:
         i18n.set_language(previous)
 
 
+def test_autostart_starts_in_the_tray() -> None:
+    """The one thing the login entry must say, besides the path.
+
+    Without the flag an autostarted copy opens its window over whatever
+    the user logged in to do, and the bug is invisible until the next
+    reboot — worth a test rather than a second discovery.
+    """
+    from .system import _launch_command
+
+    command = _launch_command()
+    _check("autostart: launches minimized", command.endswith(" --minimized"), True)
+    _check("autostart: executable is quoted", command.startswith('"'), True)
+
+
 # -- runner ---------------------------------------------------------------
 
 _TESTS = [
@@ -374,6 +388,7 @@ _TESTS = [
     test_hotkey_json_guards,
     test_filler_word_list,
     test_compact_numbers,
+    test_autostart_starts_in_the_tray,
 ]
 
 

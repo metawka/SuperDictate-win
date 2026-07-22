@@ -164,9 +164,29 @@ class DictationController(QObject):
             log.error("Keyboard hook could not be installed")
             self.error_raised.emit(i18n.tr("error_hook"))
 
+        # The autostart entry is rewritten by older versions without the
+        # tray flag; put it back before the user notices at the next login.
+        system.repair_autostart()
+
         self._worker = threading.Thread(target=self._worker_loop,
                                         name="transcription-worker", daemon=True)
         self._worker.start()
+
+    def load_model(self) -> None:
+        """Start the model loading. Deliberately separate from :meth:`start`.
+
+        Creating the encoder session takes about 3.7 seconds and holds
+        the GIL for nearly all of it — it is ONNX Runtime building the
+        graph, the same cost for the 640 MB weights as for the 2.4 GB
+        ones, and there is no way to give the interpreter back in the
+        middle of it. Whatever is on screen at that moment cannot repaint
+        and Windows may grey it out as "not responding".
+
+        So the load waits for the window to finish drawing itself first.
+        The stall is the same length either way, but it lands on a panel
+        that has already painted the words "загрузка модели" instead of
+        on an empty frame that looks like a hang.
+        """
         threading.Thread(target=self._prepare_model, name="model-loader",
                          daemon=True).start()
 

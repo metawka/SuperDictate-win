@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from superdictate import i18n, paths
@@ -31,6 +32,8 @@ from superdictate.ui.theme import stylesheet
 from superdictate.ui.updates import UpdateWatcher, notification_text
 from superdictate.ui.tray import Tray, build_icon
 from superdictate.version import VERSION
+
+MODEL_LOAD_DELAY_MS = 120
 
 
 def main(argv: list[str]) -> int:
@@ -56,7 +59,7 @@ def main(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setApplicationName("Dictation")
     # No display name: Qt would append " - Dictation" to every window title,
-    # and the control panel already says "Dictation 2.2.1".
+    # and the control panel already says "Dictation 2.2.2".
     app.setWindowIcon(build_icon())
     # One stylesheet for every window, so dialogs opened later inherit the
     # same look instead of falling back to the raw Windows theme.
@@ -104,6 +107,14 @@ def main(argv: list[str]) -> int:
 
     if "--minimized" not in argv:
         windows.show_panel()
+
+    # Only now, with the panel painted (or with nothing on screen at all
+    # in the tray-only case), does the model start loading: building the
+    # ONNX session holds the GIL for several seconds, and anything drawn
+    # during that time would sit there frozen. A posted paint event and a
+    # zero timer are not ordered against each other, hence a real delay —
+    # a tenth of a second in front of a four-second load costs nothing.
+    QTimer.singleShot(MODEL_LOAD_DELAY_MS, controller.load_model)
 
     app.aboutToQuit.connect(lambda: controller.shutdown())
     return app.exec()

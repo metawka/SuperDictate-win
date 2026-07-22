@@ -389,11 +389,20 @@ _LEGACY_RUN_VALUES = ("D1CT", "SuperDictate")
 
 
 def _launch_command() -> str:
+    """The command Windows runs at login, tray-only.
+
+    ``--minimized`` is the whole point of the entry: a copy started by
+    the system should appear in the tray and wait for the hotkey, not
+    throw a window over whatever the user is logging in to do. The
+    installer writes the flag too, but this function overwrites what the
+    installer wrote whenever settings are saved, so leaving it out here
+    silently undid it for anyone who ever opened the settings window.
+    """
     executable = sys.executable
     if getattr(sys, "frozen", False):
-        return f'"{executable}"'
+        return f'"{executable}" --minimized'
     script = paths.resource_path("main.py")
-    return f'"{executable}" "{script}"'
+    return f'"{executable}" "{script}" --minimized'
 
 
 def autostart_enabled() -> bool:
@@ -405,6 +414,33 @@ def autostart_enabled() -> bool:
             return bool(value)
     except OSError:
         return False
+
+
+def _autostart_command() -> Optional[str]:
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, _RUN_VALUE)
+            return str(value)
+    except OSError:
+        return None
+
+
+def repair_autostart() -> None:
+    """Add ``--minimized`` to an entry written before it was included.
+
+    Only when the entry already points at this very executable: a copy
+    run from source has no business repointing the installed copy's
+    autostart at a checkout.
+    """
+    current = _autostart_command()
+    if current is None or "--minimized" in current:
+        return
+    if f'"{sys.executable}"' not in current:
+        return
+    if set_autostart(True):
+        log.info("Autostart entry updated to start in the tray")
 
 
 def set_autostart(enabled: bool) -> bool:
